@@ -371,7 +371,7 @@ jobs:
             const fileName = `${filePrefix}-${timestamp}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
-            // Build pg_dump command
+            // Build pg_dump command with error handling
             let pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             
             if (BACKUP_TYPE === 'hourly') {
@@ -379,13 +379,34 @@ jobs:
               pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl ${tableArgs}`;
             }
             
-            const fullCmd = `${pgDumpCmd} | gzip -9 > ${filePath}`;
+            // Use bash pipefail to catch pg_dump errors
+            const fullCmd = `bash -c 'set -o pipefail; ${pgDumpCmd} 2>&1 | gzip -9 > ${filePath}'`;
             
             console.log(`Running pg_dump for ${BACKUP_TYPE} backup...`);
-            await execAsync(fullCmd);
+            
+            try {
+              const { stdout, stderr } = await execAsync(fullCmd);
+              if (stderr) console.log('pg_dump output:', stderr);
+            } catch (dumpError) {
+              // Read the partial file to see the error
+              const { readFileSync } = await import('fs');
+              const { gunzipSync } = await import('zlib');
+              try {
+                const content = gunzipSync(readFileSync(filePath)).toString().slice(0, 500);
+                console.error('pg_dump failed. Output:', content);
+              } catch (e) {
+                console.error('pg_dump failed:', sanitizeError(dumpError));
+              }
+              throw new Error(`pg_dump failed: ${sanitizeError(dumpError)}`);
+            }
             
             const stats = statSync(filePath);
             console.log(`Backup created: ${fileName} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+            
+            // Validate backup size (minimum 100 bytes for a valid dump)
+            if (stats.size < 100) {
+              throw new Error(`Backup file too small (${stats.size} bytes). Database connection may have failed.`);
+            }
             
             // Upload to Google Drive
             const uploadResult = await uploadToGoogleDrive(filePath, fileName, folderId);
