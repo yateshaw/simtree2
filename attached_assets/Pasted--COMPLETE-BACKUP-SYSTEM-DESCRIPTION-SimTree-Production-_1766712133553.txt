@@ -1,0 +1,371 @@
+📋 COMPLETE BACKUP SYSTEM DESCRIPTION - SimTree Production Database
+🎯 SYSTEM OVERVIEW
+This is an automated, cloud-based backup system for SimTree's production PostgreSQL database (hosted on Neon). The system runs independently on GitHub Actions (24/7 availability) and does NOT depend on the Replit application being online.
+
+🏗️ SYSTEM ARCHITECTURE
+┌─────────────────────────────────────────────────────────────────┐
+│                     GitHub Actions (Executor)                    │
+│  - Runs on Ubuntu 24.04 LTS                                     │
+│  - Executes on schedule (cron) or manual trigger                │
+│  - PostgreSQL 17 client installed                               │
+└────────────┬────────────────────────────────────────────────────┘
+             │
+             ├─► Connects to Neon PostgreSQL 17.7 (Production DB)
+             │   - Executes pg_dump to extract database
+             │   - Compresses with gzip (level 9)
+             │
+             ├─► Uploads to Google Drive (3 separate folders)
+             │   - Uses Service Account authentication
+             │   - Streams data directly (no local disk storage)
+             │
+             └─► Sends notifications via SendGrid
+                 - Weekly summary (Fridays)
+                 - Failure alerts (after 3 failed attempts)
+
+📦 BACKUP TYPES & SCHEDULE
+1. DAILY FULL BACKUP
+
+Frequency: Every day at 3:00 AM Argentina Time (6:00 AM UTC)
+Scope: Complete database dump (all tables, all data)
+Retention: 30 backups (1 month)
+Folder: daily-db-backups (ID: 1MGgU3_IlZUmlBCB2bf7DWdSSp-304nrT)
+File naming: simtree-daily-backup-YYYYMMDD-HHMMSS.sql.gz
+
+2. MONTHLY FULL BACKUP
+
+Frequency: 1st day of each month at 5:00 AM Argentina Time (8:00 AM UTC)
+Scope: Complete database dump (all tables, all data)
+Retention: 12 backups (1 year)
+Folder: monthly-backups (ID: 1EjGC5dRoGHquDz8DJ0KGfPMrWyv6HtRS)
+File naming: simtree-monthly-backup-YYYYMMDD-HHMMSS.sql.gz
+
+3. HOURLY INCREMENTAL BACKUP (Critical tables only)
+
+Frequency: Every hour on the hour (24 times per day)
+Scope: ONLY 3 critical tables:
+
+wallets (user wallets)
+wallet_transactions (transaction history)
+purchased_esims (purchased eSIM records)
+
+
+Retention: 48 backups (2 days)
+Folder: hourly-diffs (ID: 1RiEv6y06PDeGVP1gFVEz6uc6m2n6fSqU)
+File naming: simtree-hourly-backup-YYYYMMDD-HHMMSS.sql.gz
+
+4. WEEKLY SUMMARY REPORT
+
+Frequency: Every Friday at 5:00 PM Argentina Time (8:00 PM UTC)
+Action: Sends email summary with statistics
+Content: Total backups created, storage used, success status
+No files created - only email report
+
+
+🔄 BACKUP EXECUTION FLOW
+Step-by-Step Process:
+
+TRIGGER
+
+GitHub Actions cron scheduler activates at configured time
+OR manual trigger from GitHub UI
+
+
+ENVIRONMENT SETUP
+
+Checkout repository code
+Install Node.js 20
+Install PostgreSQL 17 client
+Install npm dependencies (googleapis, sendgrid, google-auth-library)
+
+
+DATABASE DUMP
+
+bash   # For full backups (daily/monthly):
+   pg_dump "postgresql://..." --no-owner --no-acl | gzip -9
+   
+   # For hourly backups (critical tables only):
+   pg_dump "postgresql://..." --no-owner --no-acl \
+     -t wallets -t wallet_transactions -t purchased_esims | gzip -9
+```
+
+4. **RETRY MECHANISM** (if dump fails)
+   - Attempt 1 → Wait 1 second → Attempt 2 → Wait 2 seconds → Attempt 3
+   - Exponential backoff between retries
+   - Maximum 3 attempts per backup
+
+5. **UPLOAD TO GOOGLE DRIVE**
+   - Authenticate using Service Account JSON
+   - Stream compressed file directly to Google Drive
+   - No intermediate disk storage (memory streaming)
+   - File ID returned for tracking
+
+6. **RETENTION MANAGEMENT**
+   - List all files in target folder
+   - Sort by creation date (newest first)
+   - Delete oldest files exceeding retention limit:
+     - Daily: Keep 30, delete rest
+     - Monthly: Keep 12, delete rest
+     - Hourly: Keep 48, delete rest
+
+7. **NOTIFICATION** (Conditional)
+   - **Success:** No individual email (only weekly summary)
+   - **Failure (after 3 attempts):** Send urgent email with error details
+
+---
+
+## 🔐 AUTHENTICATION & SECURITY
+
+### Google Drive Access
+- **Method:** Service Account (OAuth 2.0)
+- **Email:** `simtree-backup-service@[project-id].iam.gserviceaccount.com`
+- **Permissions:** Editor role on 3 specific folders
+- **Storage:** Credentials stored as GitHub Secret (encrypted)
+
+### Database Connection
+- **Method:** PostgreSQL connection string with SSL
+- **Format:** `postgresql://user:pass@host/db?sslmode=require`
+- **Storage:** GitHub Secret `PROD_DATABASE_URL`
+
+### Email Notifications
+- **Provider:** SendGrid
+- **Authentication:** API Key
+- **From:** `hey@simtree.co` (or configured email)
+- **To:** `yateshaw@gmail.com`
+
+---
+
+## 📊 DATA FLOW DIAGRAM
+```
+┌──────────────┐
+│  GitHub      │
+│  Actions     │
+│  (Scheduler) │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────────────────────────────┐
+│  Backup Script Execution             │
+│  (scripts/github-actions-backup.ts)  │
+└──────┬───────────────────────────────┘
+       │
+       ├─► Connect to Neon PostgreSQL
+       │   ├─ Execute pg_dump
+       │   └─ Compress with gzip
+       │
+       ├─► Authenticate to Google Drive
+       │   ├─ Parse Service Account JSON
+       │   └─ Obtain OAuth token
+       │
+       ├─► Upload Backup File
+       │   ├─ Create file in Drive folder
+       │   ├─ Stream data (no local storage)
+       │   └─ Return file ID
+       │
+       ├─► Manage Retention
+       │   ├─ List existing files
+       │   ├─ Sort by date
+       │   └─ Delete oldest files
+       │
+       └─► Send Notification (if needed)
+           └─ Email via SendGrid
+
+🔧 TECHNICAL SPECIFICATIONS
+PostgreSQL Dump Options
+
+--no-owner - Don't restore object ownership
+--no-acl - Don't restore access privileges
+-t [table] - Dump specific table only (hourly backups)
+
+Compression
+
+Algorithm: gzip
+Level: 9 (maximum compression)
+Typical ratio: ~10:1 (10 MB → 1 MB)
+
+File Streaming
+
+Method: Node.js Readable streams
+Benefits:
+
+No disk I/O on GitHub Actions runner
+Lower memory footprint
+Faster upload times
+No temporary file cleanup needed
+
+
+
+Google Drive API
+
+Version: v3
+Operations:
+
+files.create - Upload new backup
+files.list - Get existing backups
+files.delete - Remove old backups
+
+
+Authentication: OAuth 2.0 with Service Account
+
+
+📁 FILE STRUCTURE
+typescript// Main backup script structure
+interface BackupConfig {
+  type: 'daily' | 'monthly' | 'hourly';
+  databaseUrl: string;           // Neon connection string
+  folderId: string;              // Google Drive folder ID
+  maxRetention: number;          // Number of backups to keep
+}
+
+interface BackupResult {
+  success: boolean;
+  filename?: string;             // Backup file name
+  size?: number;                 // File size in bytes
+  fileId?: string;               // Google Drive file ID
+  error?: string;                // Error message if failed
+  attempt?: number;              // Attempt number (1-3)
+}
+```
+
+---
+
+## 🚨 ERROR HANDLING
+
+### Retry Logic
+```
+Attempt 1 FAILS
+  ↓
+Wait 1 second (2^0 * 1000ms)
+  ↓
+Attempt 2 FAILS
+  ↓
+Wait 2 seconds (2^1 * 1000ms)
+  ↓
+Attempt 3 FAILS
+  ↓
+Send failure email
+Exit with error
+Common Errors & Recovery
+ErrorCauseAuto-RecoveryConnection timeoutNetwork issue✅ Retry handles itInvalid JWT SignatureWrong service account JSON❌ Needs manual fixFile not foundOld file already deleted⚠️ Non-critical, continuesVersion mismatchPostgreSQL version incompatible❌ Needs pg_dump update
+
+📧 NOTIFICATION SYSTEM
+Weekly Summary Email (Fridays 5 PM)
+Contains:
+
+Total backups created in past 7 days per type
+Storage consumed (GB)
+Success/failure status
+Retention configuration
+
+Format: HTML email with statistics grid
+Failure Alert Email (Immediate)
+Sent when:
+
+Backup fails after 3 retry attempts
+
+Contains:
+
+Backup type that failed
+Number of attempts made
+Detailed error message
+Recommended actions
+
+
+🎛️ MANUAL EXECUTION
+Backups can be triggered manually from GitHub:
+
+Navigate to repository → Actions tab
+Click Production Database Backups workflow
+Click Run workflow button
+Select backup type:
+
+daily - Full database backup
+monthly - Full database backup
+hourly - Critical tables only
+weekly-summary - Send email summary
+
+
+Click Run workflow to execute
+
+
+📈 STORAGE ESTIMATES
+Assuming:
+
+Production database size: ~500 MB
+Compression ratio: 10:1
+Critical tables: ~50 MB (10% of total)
+
+Monthly storage usage:
+
+Daily backups: 30 × 50 MB = 1.5 GB
+Monthly backups: 12 × 50 MB = 600 MB
+Hourly backups: 48 × 5 MB = 240 MB
+Total: ~2.34 GB per month
+
+
+🔍 MONITORING & LOGS
+GitHub Actions Logs
+
+Full execution trace available in Actions tab
+Logs retained for 90 days
+Downloadable for offline analysis
+
+Database Tracking
+The system logs each backup to a backups table:
+sqlCREATE TABLE backups (
+  id SERIAL PRIMARY KEY,
+  filename TEXT,
+  size BIGINT,
+  drive_file_id TEXT,
+  type TEXT,
+  status TEXT,
+  created_at TIMESTAMP
+);
+
+⚙️ CONFIGURATION VARIABLES
+GitHub Secrets (Required)
+
+PROD_DATABASE_URL - Neon PostgreSQL connection string
+GOOGLE_SERVICE_ACCOUNT_JSON - Full service account JSON
+GOOGLE_DRIVE_FOLDER_ID_DAILY - Daily backup folder ID
+GOOGLE_DRIVE_FOLDER_ID_MONTHLY - Monthly backup folder ID
+GOOGLE_DRIVE_FOLDER_ID_HOURLY - Hourly backup folder ID
+SENDGRID_API_KEY - SendGrid API key
+SENDGRID_FROM_EMAIL - Sender email (optional)
+
+Retention Limits (Hardcoded)
+typescriptconst retentionMap = {
+  daily: 30,     // 1 month
+  monthly: 12,   // 1 year
+  hourly: 48,    // 2 days
+};
+
+🆘 DISASTER RECOVERY
+How to Restore a Backup
+
+Download backup from Google Drive
+
+bash   # File will be named: simtree-[type]-backup-YYYYMMDD-HHMMSS.sql.gz
+
+Decompress the file
+
+bash   gunzip simtree-daily-backup-20241224-060000.sql.gz
+
+Restore to database
+
+bash   psql "postgresql://user:pass@host/db?sslmode=require" < simtree-daily-backup-20241224-060000.sql
+
+Verify restoration
+
+sql   SELECT COUNT(*) FROM wallets;
+   SELECT COUNT(*) FROM purchased_esims;
+
+🚀 ADVANTAGES OF THIS SYSTEM
+
+Independence: Runs on GitHub infrastructure, not dependent on Replit
+Reliability: GitHub Actions has 99.95% uptime SLA
+Cost: Free (GitHub Actions provides 2000 free minutes/month)
+Security: Encrypted secrets, no credentials in code
+Scalability: Can handle databases up to several GB
+Visibility: Full logs and email notifications
+Automation: Zero manual intervention required
+Multi-tier: Different retention policies for different needs

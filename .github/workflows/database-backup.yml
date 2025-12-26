@@ -1,11 +1,15 @@
-name: Database Backup to Google Drive
+name: Production Database Backups
 
 on:
   schedule:
-    # Daily full backup at 06:00 UTC (03:00 AM Buenos Aires)
+    # Daily full backup at 06:00 UTC (03:00 AM Argentina)
     - cron: '0 6 * * *'
-    # Incremental backup every 4 hours
-    - cron: '0 */4 * * *'
+    # Monthly full backup at 08:00 UTC (05:00 AM Argentina) on 1st of month
+    - cron: '0 8 1 * *'
+    # Hourly incremental backup (critical tables only)
+    - cron: '0 * * * *'
+    # Weekly summary email on Fridays at 20:00 UTC (17:00 Argentina)
+    - cron: '0 20 * * 5'
   workflow_dispatch:
     inputs:
       backup_type:
@@ -15,14 +19,16 @@ on:
         type: choice
         options:
           - daily
+          - monthly
           - hourly
+          - weekly-summary
 
 env:
   NODE_VERSION: '20'
 
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     steps:
       - name: Checkout repository
@@ -33,8 +39,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Install dependencies
-        run: npm install --no-save googleapis
+        run: npm install --no-save googleapis @sendgrid/mail google-auth-library
 
       - name: Determine backup type
         id: backup-type
@@ -43,6 +54,10 @@ jobs:
             echo "type=${{ github.event.inputs.backup_type }}" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.schedule }}" == "0 6 * * *" ]; then
             echo "type=daily" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" == "0 8 1 * *" ]; then
+            echo "type=monthly" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" == "0 20 * * 5" ]; then
+            echo "type=weekly-summary" >> $GITHUB_OUTPUT
           else
             echo "type=hourly" >> $GITHUB_OUTPUT
           fi
@@ -68,14 +83,22 @@ jobs:
           const BACKUP_TYPE = process.env.BACKUP_TYPE || 'daily';
           const DATABASE_URL = process.env.DATABASE_URL;
           const GOOGLE_CREDENTIALS = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-          const DAILY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
-          const HOURLY_FOLDER_ID = process.env.HOURLY_DRIVE_FOLDER_ID;
+          const DAILY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY;
+          const MONTHLY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_MONTHLY;
+          const HOURLY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY;
           const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-          const NOTIFICATION_EMAIL = process.env.BACKUP_NOTIFICATION_EMAIL || 'admin@example.com';
-          const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'backups@example.com';
+          const NOTIFICATION_EMAIL = process.env.BACKUP_NOTIFICATION_EMAIL || 'yateshaw@gmail.com';
+          const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'hey@simtree.co';
 
           // Critical tables for hourly backup
           const CRITICAL_TABLES = ['wallets', 'wallet_transactions', 'purchased_esims'];
+
+          // Retention limits
+          const RETENTION = {
+            daily: 30,    // 1 month
+            monthly: 12,  // 1 year
+            hourly: 48    // 2 days
+          };
 
           async function sendEmail(subject, body) {
             if (!SENDGRID_API_KEY) {
@@ -108,14 +131,16 @@ jobs:
             }
           }
 
-          async function uploadToGoogleDrive(filePath, fileName, folderId) {
+          function getAuth() {
             const credentials = JSON.parse(GOOGLE_CREDENTIALS);
-            
-            const auth = new google.auth.GoogleAuth({
+            return new google.auth.GoogleAuth({
               credentials,
               scopes: ['https://www.googleapis.com/auth/drive.file']
             });
-            
+          }
+
+          async function uploadToGoogleDrive(filePath, fileName, folderId) {
+            const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
             
             console.log(`Uploading ${fileName} to Google Drive...`);
@@ -142,13 +167,7 @@ jobs:
           }
 
           async function manageRetention(folderId, maxFiles) {
-            const credentials = JSON.parse(GOOGLE_CREDENTIALS);
-            
-            const auth = new google.auth.GoogleAuth({
-              credentials,
-              scopes: ['https://www.googleapis.com/auth/drive.file']
-            });
-            
+            const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
             
             const listResponse = await drive.files.list({
@@ -173,6 +192,134 @@ jobs:
             }
           }
 
+          async function getBackupStats() {
+            const auth = getAuth();
+            const drive = google.drive({ version: 'v3', auth });
+            
+            const stats = {};
+            const folders = {
+              daily: DAILY_FOLDER_ID,
+              monthly: MONTHLY_FOLDER_ID,
+              hourly: HOURLY_FOLDER_ID
+            };
+            
+            for (const [type, folderId] of Object.entries(folders)) {
+              if (!folderId) continue;
+              
+              const listResponse = await drive.files.list({
+                q: `'${folderId}' in parents and trashed=false`,
+                fields: 'files(id, name, size, createdTime)',
+                orderBy: 'createdTime desc',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
+              });
+              
+              const files = listResponse.data.files || [];
+              const totalSize = files.reduce((sum, f) => sum + parseInt(f.size || 0), 0);
+              
+              // Count backups from last 7 days
+              const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+              const recentBackups = files.filter(f => new Date(f.createdTime) > weekAgo);
+              
+              stats[type] = {
+                total: files.length,
+                recentCount: recentBackups.length,
+                totalSizeBytes: totalSize,
+                totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+                retention: RETENTION[type]
+              };
+            }
+            
+            return stats;
+          }
+
+          async function sendWeeklySummary() {
+            console.log('Generating weekly backup summary...');
+            
+            if (!GOOGLE_CREDENTIALS) {
+              throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured');
+            }
+            
+            const stats = await getBackupStats();
+            
+            const totalStorage = Object.values(stats).reduce((sum, s) => sum + s.totalSizeBytes, 0);
+            const totalBackupsThisWeek = Object.values(stats).reduce((sum, s) => sum + s.recentCount, 0);
+            
+            const html = `
+              <h2>📊 SimTree Weekly Backup Summary</h2>
+              <p><strong>Report Date:</strong> ${new Date().toISOString()}</p>
+              
+              <h3>Backup Statistics (Last 7 Days)</h3>
+              <table border="1" cellpadding="8" style="border-collapse: collapse;">
+                <tr style="background-color: #f0f0f0;">
+                  <th>Type</th>
+                  <th>Backups This Week</th>
+                  <th>Total Backups</th>
+                  <th>Storage Used</th>
+                  <th>Retention Policy</th>
+                </tr>
+                <tr>
+                  <td>Daily</td>
+                  <td>${stats.daily?.recentCount || 0}</td>
+                  <td>${stats.daily?.total || 0}</td>
+                  <td>${stats.daily?.totalSizeMB || 0} MB</td>
+                  <td>${RETENTION.daily} backups</td>
+                </tr>
+                <tr>
+                  <td>Monthly</td>
+                  <td>${stats.monthly?.recentCount || 0}</td>
+                  <td>${stats.monthly?.total || 0}</td>
+                  <td>${stats.monthly?.totalSizeMB || 0} MB</td>
+                  <td>${RETENTION.monthly} backups</td>
+                </tr>
+                <tr>
+                  <td>Hourly</td>
+                  <td>${stats.hourly?.recentCount || 0}</td>
+                  <td>${stats.hourly?.total || 0}</td>
+                  <td>${stats.hourly?.totalSizeMB || 0} MB</td>
+                  <td>${RETENTION.hourly} backups</td>
+                </tr>
+              </table>
+              
+              <h3>Summary</h3>
+              <ul>
+                <li><strong>Total backups this week:</strong> ${totalBackupsThisWeek}</li>
+                <li><strong>Total storage used:</strong> ${(totalStorage / 1024 / 1024).toFixed(2)} MB</li>
+                <li><strong>System status:</strong> ✅ Operational</li>
+              </ul>
+              
+              <p style="color: #666; font-size: 12px;">
+                This is an automated report from SimTree Backup System running on GitHub Actions.
+              </p>
+            `;
+            
+            await sendEmail('📊 SimTree Weekly Backup Summary', html);
+            console.log('✅ Weekly summary sent');
+            return { success: true, type: 'weekly-summary' };
+          }
+
+          async function runBackupWithRetry(maxAttempts = 3) {
+            let lastError;
+            
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                console.log(`Attempt ${attempt}/${maxAttempts}...`);
+                return await runBackup();
+              } catch (error) {
+                lastError = error;
+                console.error(`Attempt ${attempt} failed:`, sanitizeError(error));
+                
+                if (attempt < maxAttempts) {
+                  const delay = Math.pow(2, attempt - 1) * 1000;
+                  console.log(`Waiting ${delay}ms before retry...`);
+                  await new Promise(r => setTimeout(r, delay));
+                }
+              }
+            }
+            
+            throw lastError;
+          }
+
           async function runBackup() {
             console.log(`Starting ${BACKUP_TYPE} backup...`);
             
@@ -184,24 +331,44 @@ jobs:
               throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured');
             }
             
-            const folderId = BACKUP_TYPE === 'hourly' ? HOURLY_FOLDER_ID : DAILY_FOLDER_ID;
-            const maxRetention = BACKUP_TYPE === 'hourly' ? 48 : 14;
+            // Determine folder and retention based on backup type
+            let folderId, maxRetention, filePrefix;
             
-            if (!folderId) {
-              throw new Error(`${BACKUP_TYPE === 'hourly' ? 'HOURLY_DRIVE_FOLDER_ID' : 'GOOGLE_DRIVE_FOLDER_ID'} not configured`);
+            switch (BACKUP_TYPE) {
+              case 'monthly':
+                folderId = MONTHLY_FOLDER_ID;
+                maxRetention = RETENTION.monthly;
+                filePrefix = 'simtree-monthly-backup';
+                break;
+              case 'hourly':
+                folderId = HOURLY_FOLDER_ID;
+                maxRetention = RETENTION.hourly;
+                filePrefix = 'simtree-hourly-backup';
+                break;
+              default: // daily
+                folderId = DAILY_FOLDER_ID;
+                maxRetention = RETENTION.daily;
+                filePrefix = 'simtree-daily-backup';
             }
             
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            const prefix = BACKUP_TYPE === 'hourly' ? 'simtree-hourly-backup' : 'simtree-backup';
-            const fileName = `${prefix}-${timestamp}.sql.gz`;
+            if (!folderId) {
+              throw new Error(`Folder ID not configured for ${BACKUP_TYPE} backup`);
+            }
+            
+            const now = new Date();
+            const timestamp = now.toISOString()
+              .replace(/[-:T]/g, '')
+              .slice(0, 14)
+              .replace(/(\d{8})(\d{6})/, '$1-$2');
+            const fileName = `${filePrefix}-${timestamp}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
             // Build pg_dump command
-            let pgDumpCmd = `pg_dump "${DATABASE_URL}"`;
+            let pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             
             if (BACKUP_TYPE === 'hourly') {
-              const tableArgs = CRITICAL_TABLES.map(t => `--table=${t}`).join(' ');
-              pgDumpCmd = `pg_dump ${tableArgs} "${DATABASE_URL}"`;
+              const tableArgs = CRITICAL_TABLES.map(t => `-t ${t}`).join(' ');
+              pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl ${tableArgs}`;
             }
             
             const fullCmd = `${pgDumpCmd} | gzip -9 > ${filePath}`;
@@ -221,45 +388,46 @@ jobs:
             // Manage retention
             await manageRetention(folderId, maxRetention);
             
-            // Send success email
-            const driveLink = `https://drive.google.com/file/d/${uploadResult.id}/view`;
-            await sendEmail(
-              `✅ ${BACKUP_TYPE.charAt(0).toUpperCase() + BACKUP_TYPE.slice(1)} Backup Successful`,
-              `
-                <h2>Database Backup Completed</h2>
-                <p><strong>Type:</strong> ${BACKUP_TYPE}</p>
-                <p><strong>File:</strong> ${fileName}</p>
-                <p><strong>Size:</strong> ${(stats.size / 1024 / 1024).toFixed(2)} MB</p>
-                <p><strong>Time:</strong> ${new Date().toISOString()}</p>
-                <p><a href="${driveLink}">View in Google Drive</a></p>
-              `
-            );
-            
             console.log('✅ Backup completed successfully');
             return { success: true, fileName, size: stats.size, driveFileId: uploadResult.id };
           }
 
-          runBackup()
-            .then(result => {
+          async function main() {
+            try {
+              if (BACKUP_TYPE === 'weekly-summary') {
+                return await sendWeeklySummary();
+              }
+              
+              const result = await runBackupWithRetry(3);
               console.log('Backup result:', JSON.stringify(result, null, 2));
               process.exit(0);
-            })
-            .catch(async error => {
+            } catch (error) {
               const safeError = sanitizeError(error);
-              console.error('❌ Backup failed:', safeError);
+              console.error('❌ Backup failed after all retries:', safeError);
               
+              // Send failure notification
               await sendEmail(
-                '❌ Database Backup Failed',
+                `❌ ${BACKUP_TYPE.toUpperCase()} Backup Failed - SimTree`,
                 `
-                  <h2>Database Backup Failed</h2>
+                  <h2>⚠️ Database Backup Failed</h2>
                   <p><strong>Type:</strong> ${BACKUP_TYPE}</p>
+                  <p><strong>Attempts:</strong> 3</p>
                   <p><strong>Error:</strong> ${safeError}</p>
                   <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+                  <h3>Recommended Actions:</h3>
+                  <ul>
+                    <li>Check database connectivity</li>
+                    <li>Verify Google Drive credentials</li>
+                    <li>Review GitHub Actions logs</li>
+                  </ul>
                 `
               );
               
               process.exit(1);
-            });
+            }
+          }
+
+          main();
           SCRIPT_EOF
 
       - name: Run backup
@@ -267,8 +435,9 @@ jobs:
           BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          HOURLY_DRIVE_FOLDER_ID: ${{ secrets.HOURLY_DRIVE_FOLDER_ID }}
+          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
+          GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
+          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
           BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
