@@ -407,12 +407,8 @@ async function startServer() {
             const initBillingSchedulerWithRetry = (attempt = 1, maxAttempts = 5) => {
               try {
                 log(`[Billing] Initializing automatic billing scheduler (attempt ${attempt}/${maxAttempts})...`);
-                const success = billingScheduler.init();
-                if (success !== false) {
-                  log("[Billing] ✅ Automatic billing scheduler initialized");
-                } else {
-                  throw new Error("Scheduler returned false");
-                }
+                billingScheduler.init();
+                log("[Billing] ✅ Automatic billing scheduler initialized");
               } catch (error) {
                 console.error(`[Billing] Error initializing billing scheduler (attempt ${attempt}):`, error);
                 if (attempt < maxAttempts) {
