@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activar eSIM - Android</title>
+    <style>
+        body {
+            font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #202124;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px 0;
+        }
+        
+        .logo {
+            max-width: 180px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #1a73e8;
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+        }
+        
+        .button {
+            display: block;
+            background-color: #1a73e8;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            text-align: center;
+            padding: 12px 24px;
+            border-radius: 4px;
+            margin: 25px auto;
+            width: 80%;
+            max-width: 300px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .button:hover {
+            background-color: #185abc;
+        }
+        
+        .alternative-method {
+            margin-top: 30px;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #dadce0;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            font-weight: 500;
+            color: #3c4043;
+            margin: 15px 0;
+        }
+        
+        .code-display {
+            background-color: #f1f3f4;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 15px 0;
+            word-break: break-all;
+        }
+        
+        .steps {
+            margin-top: 30px;
+        }
+        
+        .step {
+            margin-bottom: 20px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,.3);
+        }
+        
+        .step-number {
+            background-color: #1a73e8;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 10px;
+        }
+        
+        .step-image {
+            max-width: 100%;
+            margin: 10px 0;
+            border-radius: 4px;
+            border: 1px solid #dadce0;
+        }
+        
+        .notification {
+            background-color: #e8f0fe;
+            border-left: 4px solid #1a73e8;
+            padding: 12px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        @media (max-width: 600px) {
+            .button {
+                width: 100%;
+            }
+            
+            h1 {
+                font-size: 22px;
+            }
+            
+            .card {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://brand.repl.co/logos/replit-logo-large-dark.png" alt="Logo" class="logo">
+            <h1>Activación de eSIM para Android</h1>
+        </div>
+        
+        <div class="card">
+            <p>Su eSIM está listo para ser activado en su dispositivo Android. Para completar la activación, pulse el botón a continuación:</p>
+            
+            <a href="{{LPA_URL}}" id="activate-button" class="button">Activar eSIM ahora</a>
+            
+            <div class="notification">
+                <strong>Nota:</strong> Al pulsar el botón, se abrirá la aplicación de configuración de eSIM en su dispositivo.
+            </div>
+            
+            <div class="alternative-method">
+                <h2 class="subtitle">¿El botón no funciona?</h2>
+                <p>Si el botón no funciona, copie este código de activación e introdúzcalo manualmente en su dispositivo:</p>
+                <div class="code-display">{{ACTIVATION_CODE}}</div>
+            </div>
+        </div>
+        
+        <div class="card steps">
+            <h2 class="subtitle">Instrucciones manuales para activar su eSIM</h2>
+            
+            <div class="step">
+                <span class="step-number">1</span>
+                <span>Vaya a <strong>Configuración</strong> en su dispositivo Android</span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-settings-icon.jpg" alt="Configuración de Android" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">2</span>
+                <span>Pulse en <strong>Red e Internet</strong> o <strong>Conexiones</strong></span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-network-menu.jpg" alt="Menú de Red" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">3</span>
+                <span>Pulse en <strong>Tarjetas SIM</strong> o <strong>Administrador de SIM</strong></span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-sim-menu.jpg" alt="Menú de SIM" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">4</span>
+                <span>Pulse en <strong>Añadir eSIM</strong> o <strong>+ Añadir plan de datos móviles</strong></span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-add-esim.jpg" alt="Añadir eSIM" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">5</span>
+                <span>Seleccione <strong>Tengo un código QR o de activación</strong></span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-activation-code.jpg" alt="Código de activación" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">6</span>
+                <span>Introduzca el código de activación: <strong>{{ACTIVATION_CODE}}</strong></span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-enter-code.jpg" alt="Introducir código" class="step-image">
+            </div>
+            
+            <div class="step">
+                <span class="step-number">7</span>
+                <span>Confirme la activación y siga las instrucciones en pantalla</span>
+                <img src="https://esim-assets.s3.amazonaws.com/android-confirm.jpg" alt="Confirmar activación" class="step-image">
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800px" height="600px" viewBox="0 0 800 600" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <!-- Argentina flag -->
+    <rect width="800" height="200" fill="#75aadb"/>
+    <rect y="200" width="800" height="200" fill="#fff"/>
+    <rect y="400" width="800" height="200" fill="#75aadb"/>
+    <circle cx="400" cy="300" r="60" fill="#fcbf49"/>
+    <path d="M400,260 C373.5,260 352,281.5 352,308 C352,334.5 373.5,356 400,356 C426.5,356 448,334.5 448,308 C448,281.5 426.5,260 400,260 Z M400,268 C422.1,268 440,285.9 440,308 C440,330.1 422.1,348 400,348 C377.9,348 360,330.1 360,308 C360,285.9 377.9,268 400,268 Z" fill="#75aadb"/>
+    <path d="M400,260 L407,288 L435,288 L412,305 L420,335 L400,315 L380,335 L388,305 L365,288 L393,288 Z" fill="#fcbf49"/>
+</svg>

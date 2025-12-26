@@ -1,0 +1,1 @@
+ALTER TABLE "esim_plans" DROP CONSTRAINT "esim_plans_provider_id_unique";

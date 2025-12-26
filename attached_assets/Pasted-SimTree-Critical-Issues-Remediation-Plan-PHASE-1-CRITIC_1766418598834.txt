@@ -1,0 +1,520 @@
+SimTree - Critical Issues Remediation Plan
+🔴 PHASE 1: CRITICAL SECURITY FIXES (Implement Immediately)
+1.1 Fix Super Admin Password Authentication
+Issue: Plain-text password comparison bypasses PBKDF2 security
+typescript// server/auth.ts - CURRENT (VULNERABLE)
+if (password === secureSadminPassword) { /* ... */ }
+
+// FIXED VERSION
+import { verifyPassword } from './lib/password-security';
+
+// On first startup, hash the SADMIN_PASSWORD
+const hashedSadminPassword = await hashPassword(process.env.SADMIN_PASSWORD);
+// Store in database or use pre-hashed value in env
+
+// During login
+const isValidSadmin = await verifyPassword(
+  password, 
+  hashedSadminPassword
+);
+Action Items:
+
+ Hash SADMIN_PASSWORD during initial setup
+ Store hashed value in system_config table or environment
+ Update login route to use verifyPassword()
+ Test with existing sadmin credentials
+
+
+1.2 Implement Atomic Database Transactions for Purchases
+Issue: Multi-wallet operations not atomic - data corruption risk
+typescript// server/storage.ts - CURRENT (NOT ATOMIC)
+async createEsimPurchaseTransactions(...) {
+  // Multiple separate operations without transaction wrapper
+  await db.insert(walletTransactions).values(clientDebit);
+  await db.update(wallets).set({...}).where(...);
+  await db.insert(walletTransactions).values(simtreeCredit);
+  // If any fails, partial state remains
+}
+
+// FIXED VERSION with Drizzle transactions
+async createEsimPurchaseTransactions(
+  db: any,
+  purchaseData: PurchaseData
+) {
+  return await db.transaction(async (tx) => {
+    // All operations use 'tx' instead of 'db'
+    
+    // 1. Lock wallet rows to prevent race conditions
+    const [clientWallet] = await tx
+      .select()
+      .from(wallets)
+      .where(eq(wallets.id, purchaseData.clientWalletId))
+      .for('update'); // Pessimistic locking
+    
+    // 2. Verify sufficient balance
+    if (clientWallet.balance < purchaseData.totalPrice) {
+      throw new Error('Insufficient wallet balance');
+    }
+    
+    // 3. Debit client wallet
+    await tx.insert(walletTransactions).values({
+      walletId: purchaseData.clientWalletId,
+      amount: -purchaseData.totalPrice,
+      type: 'debit',
+      description: `eSIM purchase: ${purchaseData.planName}`,
+      metadata: { esimId: purchaseData.esimId }
+    });
+    
+    await tx.update(wallets)
+      .set({ balance: sql`${wallets.balance} - ${purchaseData.totalPrice}` })
+      .where(eq(wallets.id, purchaseData.clientWalletId));
+    
+    // 4. Credit SimTree wallets (general, profit, provider)
+    await tx.insert(walletTransactions).values([
+      { walletId: simtreeGeneralId, amount: purchaseData.totalPrice, type: 'credit', ... },
+      { walletId: simtreeProfitId, amount: purchaseData.profit, type: 'credit', ... },
+      { walletId: simtreeProviderId, amount: purchaseData.cost, type: 'credit', ... }
+    ]);
+    
+    // 5. Update wallet balances atomically
+    await tx.update(wallets)
+      .set({ balance: sql`${wallets.balance} + ${purchaseData.totalPrice}` })
+      .where(eq(wallets.id, simtreeGeneralId));
+    
+    // All operations succeed or all rollback
+    return { success: true };
+  });
+}
+Action Items:
+
+ Refactor createEsimPurchaseTransactions to use db.transaction()
+ Add SELECT ... FOR UPDATE for wallet locking
+ Update all callers to handle transaction errors
+ Test race condition scenarios (concurrent purchases)
+ Add integration tests for rollback behavior
+
+
+1.3 Add Provider API Rollback on Failure
+Issue: Wallet debited even if eSIM provisioning fails
+typescript// server/routes.ts - Purchase endpoint
+router.post('/executives/:id/assign-esim', async (req, res) => {
+  try {
+    // BEFORE: Debit wallet, then call provider API
+    // If provider fails, money is lost
+    
+    // FIXED: Use compensating transactions
+    let providerOrderId = null;
+    
+    try {
+      // 1. Create eSIM with provider FIRST
+      const providerResponse = await esimAccessService.createOrder({
+        planCode: planCode,
+        quantity: 1,
+        executiveEmail: executive.email
+      });
+      
+      providerOrderId = providerResponse.orderId;
+      
+      // 2. Only THEN debit wallet and create records
+      await db.transaction(async (tx) => {
+        // Wallet operations here
+        await createEsimPurchaseTransactions(tx, ...);
+        
+        // Create purchased_esim record
+        await tx.insert(purchasedEsims).values({
+          executiveId: executiveId,
+          planId: planId,
+          iccid: providerResponse.iccid,
+          qrCode: providerResponse.qrCode,
+          status: 'pending',
+          providerOrderId: providerOrderId
+        });
+      });
+      
+    } catch (providerError) {
+      // Rollback: Cancel provider order if wallet operation fails
+      if (providerOrderId) {
+        await esimAccessService.cancelOrder(providerOrderId);
+      }
+      throw providerError;
+    }
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Purchase failed, no charges applied' });
+  }
+});
+Alternative Saga Pattern:
+typescript// For more complex flows, implement saga coordinator
+class PurchaseSaga {
+  async execute(purchaseData: PurchaseData) {
+    const compensations = [];
+    
+    try {
+      // Step 1: Reserve wallet funds (soft lock)
+      const reservation = await this.reserveWalletFunds(purchaseData);
+      compensations.push(() => this.releaseReservation(reservation.id));
+      
+      // Step 2: Create eSIM with provider
+      const providerOrder = await this.createProviderOrder(purchaseData);
+      compensations.push(() => this.cancelProviderOrder(providerOrder.id));
+      
+      // Step 3: Finalize wallet debit
+      await this.finalizeWalletDebit(reservation.id);
+      
+      return { success: true, providerOrder };
+      
+    } catch (error) {
+      // Execute compensations in reverse order
+      for (const compensate of compensations.reverse()) {
+        await compensate();
+      }
+      throw error;
+    }
+  }
+}
+
+1.4 Remove PCI-Violating Card Processing
+Issue: processCardPayment function handles raw card data
+typescript// server/stripe.ts - DELETE THIS ENTIRE FUNCTION
+export async function processCardPayment(...) {
+  // This violates PCI compliance
+  // Stripe Elements should handle ALL card data
+}
+
+// server/routes/stripe.ts - ONLY use Payment Intents
+router.post('/create-payment-intent', async (req, res) => {
+  // ✅ CORRECT: Client-side Stripe Elements → Payment Intent → Webhook
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: Math.round(amount * 100),
+    currency: currency,
+    metadata: {
+      companyId: companyId.toString(),
+      userId: userId.toString()
+    }
+  });
+  
+  res.json({ clientSecret: paymentIntent.client_secret });
+});
+Action Items:
+
+ Delete processCardPayment function completely
+ Remove all direct card data handling code
+ Verify frontend uses Stripe Elements for all payments
+ Update documentation to reflect Payment Intent-only flow
+
+
+1.5 Enforce Stripe Webhook Signature in Production
+Issue: Development mode bypasses security
+typescript// server/stripe.ts - CURRENT (INSECURE)
+if (!process.env.STRIPE_WEBHOOK_SECRET) {
+  console.warn('Webhook signature verification disabled');
+  event = JSON.parse(payload);
+}
+
+// FIXED VERSION
+export function constructEventFromPayload(payload: string, signature: string) {
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('STRIPE_WEBHOOK_SECRET must be set in production');
+    }
+    console.warn('⚠️  Development mode: Webhook signature verification disabled');
+    return JSON.parse(payload);
+  }
+  
+  return stripe.webhooks.constructEvent(
+    payload,
+    signature,
+    process.env.STRIPE_WEBHOOK_SECRET
+  );
+}
+
+// server/index.ts - Add startup validation
+if (process.env.NODE_ENV === 'production') {
+  const requiredEnvVars = [
+    'DATABASE_URL',
+    'SESSION_SECRET',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'SENDGRID_API_KEY'
+  ];
+  
+  for (const varName of requiredEnvVars) {
+    if (!process.env[varName]) {
+      console.error(`❌ FATAL: ${varName} must be set in production`);
+      process.exit(1);
+    }
+  }
+}
+
+🟠 PHASE 2: HIGH-PRIORITY FIXES (Week 1)
+2.1 Add Webhook Signature Verification (eSIM Provider)
+typescript// server/routes.ts - Webhook endpoint
+router.post('/webhooks/esim-access', async (req, res) => {
+  const payload = JSON.stringify(req.body);
+  const signature = req.headers['x-esim-signature'] as string;
+  
+  // Verify signature using HMAC
+  const crypto = require('crypto');
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.ESIM_ACCESS_SECRET)
+    .update(payload)
+    .digest('hex');
+  
+  if (signature !== expectedSignature) {
+    console.error('Invalid webhook signature');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  
+  // Verify timestamp to prevent replay attacks
+  const timestamp = req.headers['x-esim-timestamp'] as string;
+  const now = Date.now();
+  const webhookTime = parseInt(timestamp);
+  
+  if (Math.abs(now - webhookTime) > 300000) { // 5 minutes
+    return res.status(401).json({ error: 'Webhook expired' });
+  }
+  
+  // Process webhook...
+});
+2.2 Implement Distributed Job Locking
+typescript// server/jobs/backup-db.job.ts
+import { sql } from 'drizzle-orm';
+
+async function acquireJobLock(lockName: string, timeoutMs: number = 60000) {
+  // PostgreSQL advisory locks for distributed locking
+  const lockId = hashString(lockName); // Convert to integer
+  
+  try {
+    const result = await db.execute(sql`
+      SELECT pg_try_advisory_lock(${lockId}) as acquired
+    `);
+    
+    return result.rows[0].acquired;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function releaseJobLock(lockName: string) {
+  const lockId = hashString(lockName);
+  await db.execute(sql`SELECT pg_advisory_unlock(${lockId})`);
+}
+
+// Usage in cron job
+cron.schedule('0 3 * * *', async () => {
+  const lockAcquired = await acquireJobLock('daily-backup');
+  
+  if (!lockAcquired) {
+    console.log('Backup already running in another instance');
+    return;
+  }
+  
+  try {
+    await performBackup();
+  } finally {
+    await releaseJobLock('daily-backup');
+  }
+});
+2.3 Add Email Retry Mechanism
+typescript// server/services/email.service.ts
+import { Queue } from 'bull'; // Or implement simple retry logic
+
+class EmailService {
+  private async sendWithRetry(
+    emailData: EmailData,
+    maxRetries: number = 3
+  ) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await sgMail.send(emailData);
+        console.log(`Email sent successfully on attempt ${attempt}`);
+        return { success: true };
+        
+      } catch (error) {
+        console.error(`Email attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxRetries) {
+          // Log to database for manual review
+          await db.insert(failedEmails).values({
+            recipient: emailData.to,
+            subject: emailData.subject,
+            template: emailData.templateId,
+            attemptCount: maxRetries,
+            lastError: error.message,
+            createdAt: new Date()
+          });
+          
+          throw error;
+        }
+        
+        // Exponential backoff
+        await sleep(Math.pow(2, attempt) * 1000);
+      }
+    }
+  }
+}
+2.4 Define Foreign Key Cascade Rules
+typescript// shared/schema.ts - Add ON DELETE clauses
+export const purchasedEsims = pgTable("purchased_esims", {
+  id: serial("id").primaryKey(),
+  
+  // Cascade: If executive deleted, remove their eSIMs
+  executiveId: integer("executive_id")
+    .references(() => executives.id, { onDelete: "cascade" })
+    .notNull(),
+  
+  // Restrict: Cannot delete plan if eSIMs use it
+  planId: integer("plan_id")
+    .references(() => esimPlans.id, { onDelete: "restrict" })
+    .notNull(),
+  
+  // ... rest of fields
+});
+
+export const executives = pgTable("executives", {
+  id: serial("id").primaryKey(),
+  
+  // Set Null: If company deleted, orphan executives (or cascade)
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: "set null" }),
+  
+  // ... rest of fields
+});
+
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: serial("id").primaryKey(),
+  
+  // Restrict: Cannot delete wallet if transactions exist
+  walletId: integer("wallet_id")
+    .references(() => wallets.id, { onDelete: "restrict" })
+    .notNull(),
+  
+  // ... rest of fields
+});
+Migration Required:
+sql-- Run this migration after schema changes
+ALTER TABLE purchased_esims 
+  DROP CONSTRAINT IF EXISTS purchased_esims_executive_id_executives_id_fk,
+  ADD CONSTRAINT purchased_esims_executive_id_executives_id_fk 
+    FOREIGN KEY (executive_id) REFERENCES executives(id) ON DELETE CASCADE;
+
+ALTER TABLE purchased_esims 
+  DROP CONSTRAINT IF EXISTS purchased_esims_plan_id_esim_plans_id_fk,
+  ADD CONSTRAINT purchased_esims_plan_id_esim_plans_id_fk 
+    FOREIGN KEY (plan_id) REFERENCES esim_plans(id) ON DELETE RESTRICT;
+
+🟡 PHASE 3: MEDIUM-PRIORITY IMPROVEMENTS (Month 1)
+3.1 Implement SSE Event Filtering by Company
+typescript// server/sse.ts
+export function sendSSEToCompany(companyId: number, event: SSEEvent) {
+  clients.forEach((client) => {
+    // Add company filtering
+    if (client.companyId === companyId || client.role === 'superadmin') {
+      client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  });
+}
+
+// Modify client registration
+export function registerSSEClient(req: Request, res: Response) {
+  const user = req.user; // From session
+  
+  const client = {
+    id: crypto.randomUUID(), // Secure random ID
+    res,
+    companyId: user.companyId,
+    role: user.role,
+    connectedAt: new Date()
+  };
+  
+  clients.set(client.id, client);
+}
+3.2 Add Database Indexes
+typescript// Create migration file: migrations/add-indexes.sql
+CREATE INDEX idx_executives_company_id ON executives(company_id);
+CREATE INDEX idx_purchased_esims_executive_id ON purchased_esims(executive_id);
+CREATE INDEX idx_purchased_esims_status ON purchased_esims(status);
+CREATE INDEX idx_wallet_transactions_wallet_id ON wallet_transactions(wallet_id);
+CREATE INDEX idx_wallet_transactions_created_at ON wallet_transactions(created_at DESC);
+CREATE INDEX idx_users_company_id ON users(company_id);
+CREATE INDEX idx_companies_status ON companies(status);
+
+// For fast wallet balance queries
+CREATE INDEX idx_wallets_company_id ON wallets(company_id);
+3.3 Add Session Regeneration
+typescript// server/auth.ts - Login route
+router.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  // ... authentication logic ...
+  
+  if (user && isValid) {
+    // Regenerate session ID to prevent fixation
+    req.session.regenerate((err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Session error' });
+      }
+      
+      // Store user in new session
+      req.session.userId = user.id;
+      req.session.companyId = user.companyId;
+      
+      res.json({ user: sanitizeUser(user) });
+    });
+  }
+});
+
+📋 Testing Checklist
+Critical Issue Tests
+
+ Super admin login with hashed password
+ Concurrent eSIM purchases from same wallet (race condition)
+ Provider API failure during purchase (rollback verification)
+ Stripe webhook with invalid signature (reject)
+ Duplicate webhook processing (idempotency)
+
+High Priority Tests
+
+ eSIM webhook with invalid signature
+ Webhook replay attack (old timestamp)
+ Concurrent backup jobs on multiple instances
+ Email delivery failure and retry
+ Foreign key cascade behavior (executive deletion)
+
+Integration Tests
+
+ End-to-end purchase flow with transaction rollback
+ Auto-renewal with insufficient wallet balance
+ Company suspension during active transaction
+ SSE event filtering by company
+ Database connection pool exhaustion
+
+
+🚀 Deployment Strategy
+Pre-Deployment
+
+Backup Current Production Database
+
+bash   pg_dump $DATABASE_URL > pre-migration-backup.sql
+
+Test in Staging Environment
+
+Deploy fixes to staging
+Run load tests (100+ concurrent purchases)
+Verify all critical flows
+
+
+Update Environment Variables
+
+bash   # Hash the sadmin password first
+   SADMIN_PASSWORD_HASH=<pre-hashed-value>
+   COOKIE_SECURE=true
+   NODE_ENV=production
+Deployment Order
+
+Deploy database schema changes (foreign keys, indexes)
+Deploy application code with transaction fixes
+Monitor logs for errors during first hour
+Run smoke tests on critical flows
+Enable monitoring alerts (Sentry, PagerDuty)
+

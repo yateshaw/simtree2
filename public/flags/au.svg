@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800px" height="600px" viewBox="0 0 800 600" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <!-- Australia flag -->
+    <rect width="800" height="600" fill="#00008b"/>
+    <rect width="400" height="300" fill="#00008b"/>
+    <path d="M0,0 L200,150 M200,0 L0,150" stroke="#fff" stroke-width="30"/>
+    <path d="M0,0 L200,150 M200,0 L0,150" stroke="#ff0000" stroke-width="10"/>
+    <path d="M100,0 L100,150 M0,75 L200,75" stroke="#fff" stroke-width="50"/>
+    <path d="M100,0 L100,150 M0,75 L200,75" stroke="#ff0000" stroke-width="30"/>
+    
+    <!-- Southern Cross stars -->
+    <path d="M400,100 L408,125 L435,125 L413,140 L420,165 L400,150 L380,165 L387,140 L365,125 L392,125 Z" fill="#fff"/>
+    <path d="M550,150 L554,160 L565,160 L556,167 L560,177 L550,170 L540,177 L544,167 L535,160 L546,160 Z" fill="#fff"/>
+    <path d="M550,250 L554,260 L565,260 L556,267 L560,277 L550,270 L540,277 L544,267 L535,260 L546,260 Z" fill="#fff"/>
+    <path d="M650,200 L654,210 L665,210 L656,217 L660,227 L650,220 L640,227 L644,217 L635,210 L646,210 Z" fill="#fff"/>
+    <path d="M500,300 L504,310 L515,310 L506,317 L510,327 L500,320 L490,327 L494,317 L485,310 L496,310 Z" fill="#fff"/>
+</svg>

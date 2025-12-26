@@ -1,0 +1,563 @@
+SimTree Platform - Comprehensive QA Analysis Request
+Objective
+Conduct an exhaustive quality assurance analysis of the SimTree eSIM Management Platform, identifying bugs, logic flaws, security vulnerabilities, performance bottlenecks, edge cases, and architectural inconsistencies across all system processes and functionalities.
+Analysis Scope
+1. Authentication & Authorization Security
+
+Session Management: Analyze session creation, expiration, cookie security (httpOnly, secure, SameSite), session storage in PostgreSQL, and potential session fixation vulnerabilities
+Password Security: Verify PBKDF2 implementation (100k iterations), salt randomness, timing-safe comparison, password reset token generation and expiration
+RBAC Implementation: Test role boundaries between superadmin/admin, verify company-scoped data isolation, check for privilege escalation vectors
+CSRF Protection: Validate csrf middleware coverage, token generation/validation, exempt routes justification
+Rate Limiting: Test brute force protection (50 attempts/15min), global rate limits (5000 req/15min), distributed attack scenarios
+Edge Cases: Concurrent login attempts, session hijacking scenarios, password change during active session, deleted user with active session
+
+2. eSIM Purchase Flow - Complete Transaction Analysis
+
+Wallet Balance Validation:
+
+Race conditions: Multiple simultaneous purchases depleting wallet
+Negative balance prevention
+Currency conversion accuracy during purchase
+Insufficient funds error handling at each step
+
+
+Multi-Wallet Transaction Integrity:
+
+Atomic transaction guarantee across 4 wallet operations (client debit, SimTree general credit, profit credit, provider credit)
+Rollback mechanisms if provider API fails after wallet debit
+Transaction consistency verification (sum of debits = sum of credits)
+OrphanedTransaction detection (wallet entry without corresponding eSIM record)
+
+
+Provider API Integration:
+
+Timeout handling (what happens if eSIM Access API takes >30 seconds?)
+Network failure recovery
+Duplicate order prevention (idempotency)
+QR code validation and storage
+ICCID uniqueness enforcement
+
+
+Email Delivery:
+
+SendGrid failure handling (does purchase complete if email fails?)
+QR code base64 encoding integrity
+Template variable injection vulnerabilities
+Email delivery retry mechanism
+
+
+SSE Broadcasting:
+
+Event emission failures (does transaction complete if SSE fails?)
+Race condition: UI update before database commit
+Multiple concurrent clients receiving same event
+
+
+Edge Cases:
+
+Executive deleted mid-purchase
+Company suspended during transaction
+Plan price changes between selection and purchase
+Wallet credited simultaneously during purchase deduction
+Auto-renewal triggered during manual purchase
+
+
+
+3. Real-Time Usage Tracking & Webhooks
+
+Webhook Security:
+
+Signature validation implementation
+Replay attack prevention
+Request origin validation
+Malformed payload handling
+
+
+Data Consistency:
+
+purchased_esims.dataUsage vs executives.dataUsage synchronization
+Race condition: Webhook arrives before purchase completes
+Out-of-order webhook delivery
+Duplicate webhook prevention
+Data usage exceeding plan limit handling
+
+
+Auto-Renewal Trigger Logic:
+
+90% threshold calculation accuracy
+Multiple webhooks triggering multiple renewals
+Insufficient wallet balance during auto-renewal
+Auto-renewal disabled mid-usage
+Company suspended/deleted with pending auto-renewal
+
+
+SSE Event Propagation:
+
+Disconnected clients missing critical updates
+Event ordering guarantees
+Memory leaks from abandoned connections
+
+
+Edge Cases:
+
+Webhook arrives for cancelled eSIM
+Usage data for non-existent executive
+Negative usage values
+Provider sends usage > data limit
+
+
+
+4. Payment Processing (Stripe Integration)
+
+Payment Intent Lifecycle:
+
+Amount mismatch between frontend and backend
+Currency conversion during payment
+Payment confirmation timeout handling
+Abandoned payment intents (user closes window)
+
+
+Webhook Handling:
+
+Signature verification implementation
+Duplicate webhook processing (Stripe retries)
+Out-of-order webhooks (payment.succeeded before payment.created)
+Failed payment handling and wallet rollback
+Webhook arrives before payment intent creation completes
+
+
+Wallet Crediting:
+
+Atomic operation guarantee
+Race condition: Multiple successful payments for same intent
+Credit amount validation against payment intent
+SSE broadcast failure after successful payment
+
+
+PCI Compliance:
+
+Card data never touching your server (verify Stripe Elements implementation)
+Stripe.js version and security
+Payment Element configuration
+
+
+Edge Cases:
+
+User adds credits during simultaneous eSIM purchase
+Company deleted/suspended with pending payment
+Refund processing and wallet adjustment
+Partial payment scenarios
+3D Secure authentication abandonment
+
+
+
+5. Background Jobs & Cron Reliability
+
+Database Backup Jobs:
+
+Daily Full Backup (03:00 AM):
+
+PostgreSQL dump failure handling
+Gzip compression errors
+Google Drive upload failure (network, auth, quota)
+Partial backup detection
+Notification email failure (should backup still be marked successful?)
+14-day retention deletion errors (orphaned Drive files)
+Timezone handling (Buenos Aires vs server time)
+Concurrent backup execution prevention
+
+
+Hourly Incremental Backup:
+
+Critical table selection logic (are all critical tables included?)
+48-backup retention overflow
+Corruption detection in incremental backups
+Restore procedure validation (have you tested restoring from hourly backup?)
+
+
+
+
+eSIM Plans Sync (04:00 AM):
+
+Provider API failure (no plans synced)
+Partial sync (some plans fail)
+Plan price changes affecting active eSIMs
+Plan deletion by provider (orphaned purchased eSIMs)
+planCode collision (duplicate plans)
+Sync duration (does it complete before 04:00 AM next day?)
+
+
+Auto-Renewal Job (Daily):
+
+Execution time relative to backup jobs (conflicts?)
+Processing large volumes (1000+ executives)
+Wallet depletion mid-batch
+Email notification failures
+90% threshold consistency with webhook-triggered auto-renewal
+Race condition with manual renewal
+
+
+Inactivity Checker:
+
+False positives (newly created companies)
+Notification spam prevention
+Suspension logic (automatic or manual?)
+
+
+DB Usage Monitor:
+
+Alert throttling (24-hour window) implementation
+90% threshold accuracy
+Connection leak detection
+Neon API rate limiting
+
+
+Job Failure Recovery:
+
+Are failures logged and monitored?
+Dead letter queue for failed jobs?
+Manual retry mechanism?
+Job execution overlap prevention (if job runs longer than interval)
+
+
+
+6. Data Integrity & Foreign Key Constraints
+
+Cascading Deletes:
+
+Company deletion: What happens to executives, purchased eSIMs, wallet, transactions?
+Executive deletion: purchased eSIMs orphaned? Refund logic?
+eSIM plan deletion: purchased eSIMs still referencing deleted plan?
+
+
+Referential Integrity:
+
+purchased_esims.executiveId → executives.id (ON DELETE ?)
+purchased_esims.planId → esim_plans.id (ON DELETE ?)
+wallet_transactions.walletId → wallets.id (ON DELETE ?)
+executives.companyId → companies.id (ON DELETE ?)
+
+
+Soft Delete Implementation:
+
+companies.status = 'deleted' but records remain
+Are foreign key queries filtering deleted companies?
+Can deleted companies be restored?
+Data retention policies (GDPR compliance)
+
+
+Transaction Linking:
+
+wallet_transactions.relatedTransactionId consistency
+Orphaned transactions (no related transaction)
+Circular references
+
+
+Data Denormalization:
+
+executives.dataUsage vs purchased_esims.dataUsage synchronization
+executives.dataLimit accuracy
+Stale data risks
+
+
+
+7. Multi-Currency Support
+
+Exchange Rate Service:
+
+Update failure handling (stale rates)
+Rate source reliability
+6-hour update frequency justification
+Historical rate storage for transaction auditing
+
+
+Conversion Accuracy:
+
+Rounding errors in wallet transactions
+Display currency vs storage currency (USD base)
+Plan price conversion consistency
+Wallet balance display in multiple currencies
+
+
+Currency Changes:
+
+Company changes currency mid-transaction
+Active eSIMs purchased in old currency
+Wallet transactions in mixed currencies
+
+
+
+8. Real-Time Features (SSE)
+
+Connection Management:
+
+Memory leak prevention (disconnected clients)
+Connection limit per user
+Reconnection loop prevention
+Heartbeat mechanism
+
+
+Event Delivery Guarantees:
+
+Events missed during disconnection (no message queue)
+Event ordering (WALLET_BALANCE_UPDATE before EXECUTIVE_UPDATE)
+Client-side event deduplication
+
+
+TanStack Query Integration:
+
+Query invalidation logic correctness
+Stale data window (5-minute staleTime) vs SSE immediacy
+Cache inconsistencies
+
+
+Scalability:
+
+100 concurrent SSE connections (will Neon handle it?)
+Load balancing with SSE (sticky sessions required?)
+
+
+
+9. API Security & Input Validation
+
+SQL Injection:
+
+Drizzle ORM parameterized queries verification
+Raw SQL queries (are there any?)
+Dynamic table/column names (vulnerable)
+
+
+XSS Prevention:
+
+User input sanitization in emails
+Executive name/email display in UI
+Handlebars template auto-escaping
+
+
+Parameter Validation:
+
+ID parameters (positive integers only?)
+Pagination parameters (limit, offset abuse)
+Search/filter parameters (injection vectors)
+File upload validation (if any)
+
+
+API Response Sanitization:
+
+Password hashes in user objects
+API keys in error messages
+Stack traces in production
+Sensitive metadata exposure
+
+
+
+10. Email System Reliability
+
+SendGrid Integration:
+
+API key rotation handling
+Rate limit handling (100 emails/day free tier?)
+Bounce/spam tracking
+Unsubscribe mechanism (legal requirement)
+
+
+Template Rendering:
+
+Handlebars injection vulnerabilities
+Missing variables (crashes vs empty values)
+QR code base64 size limits
+Email size limits (attachments)
+
+
+Delivery Failures:
+
+Retry mechanism
+Failed delivery logging
+User notification of failed emails
+Critical emails (activation) vs non-critical (alerts)
+
+
+
+11. Performance & Scalability
+
+Database Query Optimization:
+
+Missing indexes (companyId, executiveId, status)
+N+1 query problems
+Join complexity
+Connection pool exhaustion
+
+
+Startup Performance:
+
+30-90 second job deferral justification
+Database retry logic (1-second intervals sufficient?)
+Cold start time (Cloud Run)
+
+
+Frontend Performance:
+
+Code splitting effectiveness
+Bundle size
+Lazy loading coverage
+TanStack Query cache size (memory leaks)
+
+
+Load Testing Scenarios:
+
+100 simultaneous eSIM purchases
+1000 concurrent SSE connections
+10,000 webhook requests/hour
+Database connection saturation
+
+
+
+12. Error Handling & Recovery
+
+External Service Failures:
+
+eSIM Access API down (purchase flow breaks?)
+Stripe API down (payment flow breaks?)
+SendGrid down (email flow breaks?)
+Google Drive down (backup fails silently?)
+Neon database connection loss
+
+
+Partial Failure Scenarios:
+
+Wallet debited but eSIM API fails
+eSIM created but wallet not debited
+Email sent but eSIM not activated
+Backup uploaded but not logged in database
+
+
+Error Logging:
+
+Production error tracking (Sentry integration?)
+Error context preservation
+PII in error logs
+Alert thresholds for critical errors
+
+
+User-Facing Errors:
+
+Error message clarity
+Actionable recovery steps
+Support contact information
+Error code system
+
+
+
+13. Business Logic Edge Cases
+
+Executive Management:
+
+Executive transferred between companies
+Executive with multiple active eSIMs
+Executive deleted with active eSIM (refund?)
+Executive email change (notification?)
+
+
+Company Management:
+
+Company suspension mid-transaction
+Company deletion with positive wallet balance (refund?)
+Company status change propagation to executives
+Company currency change with active eSIMs
+
+
+Plan Management:
+
+Plan price increase for active auto-renewal eSIMs
+Plan discontinued by provider
+Plan data limit change
+Plan country change
+
+
+Wallet Management:
+
+Negative balance prevention (absolute enforcement?)
+Manual credit by superadmin (audit trail)
+Wallet balance display precision (rounding)
+Wallet transaction rollback mechanism
+
+
+
+14. Compliance & Legal
+
+Data Privacy (GDPR):
+
+Right to be forgotten implementation
+Data export mechanism
+Consent tracking
+Data retention policies
+
+
+Financial Regulations:
+
+Transaction audit trail completeness
+Invoice generation (legal requirements)
+Tax calculation (if applicable)
+Refund policies
+
+
+Telecommunications Regulations:
+
+eSIM activation compliance
+Data roaming regulations
+Emergency services requirements
+
+
+
+15. Monitoring & Observability
+
+Health Checks:
+
+/health endpoint comprehensiveness
+Dependency health checks (DB, external APIs)
+Auto-scaling triggers
+
+
+Metrics Collection:
+
+Request latency tracking
+Error rate monitoring
+Database query performance
+Background job success rates
+
+
+Alerting:
+
+Critical error notifications
+Service degradation detection
+Budget alerts (Neon, Stripe, SendGrid)
+
+
+
+Deliverable Format
+For each category above, provide:
+
+Critical Issues (P0): Bugs causing data loss, security breaches, or complete feature failure
+High Priority Issues (P1): Significant bugs affecting user experience or data integrity
+Medium Priority Issues (P2): Minor bugs, edge cases, or performance concerns
+Low Priority Issues (P3): Code quality, optimization opportunities, future considerations
+Recommendations: Architectural improvements, best practices, preventive measures
+
+Include:
+
+Severity: Critical/High/Medium/Low
+Likelihood: Certain/Probable/Possible/Unlikely
+Affected Component: Specific file/function/API endpoint
+Reproduction Steps: How to trigger the issue
+Suggested Fix: Code-level solution or architectural change
+Test Coverage: Missing tests that would catch this issue
+
+Special Focus Areas
+Given your recent work:
+
+Google Drive backup system - JWT signature validation, authentication flow, retry logic
+Foreign key constraint issues - Cascading deletes, orphaned records, referential integrity
+Database connection handling - Connection pooling, retry logic, timeout handling
+
+
+Goal: Identify every potential failure point, edge case, and security vulnerability to ensure SimTree is production-hardened for enterprise clients.

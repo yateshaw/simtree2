@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>eSIM Plan Renewed - Simtree</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+      line-height: 1.6; 
+      color: #2d3748; 
+      background-color: #f7fafc;
+    }
+    .email-wrapper { 
+      max-width: 600px; 
+      margin: 0 auto; 
+      background-color: #ffffff; 
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .header { 
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); 
+      color: #2d3748; 
+      padding: 40px 30px; 
+      text-align: center; 
+      border-bottom: 4px solid #10b981;
+    }
+    .logo { 
+      max-width: 180px; 
+      height: auto; 
+      margin-bottom: 20px; 
+    }
+    .header h1 { 
+      font-size: 24px; 
+      font-weight: 600; 
+      margin: 0; 
+      color: #2d3748;
+    }
+    .content { 
+      padding: 40px 30px; 
+      background-color: #ffffff; 
+    }
+    .greeting { 
+      font-size: 18px; 
+      color: #2d3748; 
+      margin-bottom: 20px; 
+      font-weight: 500; 
+    }
+    .details { 
+      background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); 
+      border-left: 6px solid #10b981; 
+      padding: 25px; 
+      margin: 25px 0; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); 
+    }
+    .button { 
+      display: inline-block; 
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+      color: white; 
+      padding: 15px 30px; 
+      text-decoration: none; 
+      border-radius: 8px; 
+      font-weight: 600; 
+      font-size: 16px; 
+      border: none; 
+      cursor: pointer; 
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+      transition: all 0.3s ease; 
+      margin: 20px 0; 
+    }
+    .button:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); 
+    }
+    .button-center { 
+      text-align: center; 
+      margin: 25px 0; 
+    }
+    .footer { 
+      background-color: #2d3748; 
+      color: #a0aec0; 
+      text-align: center; 
+      padding: 30px; 
+      font-size: 14px; 
+    }
+    .footer strong { 
+      color: #ffffff; 
+    }
+    .divider { 
+      height: 2px; 
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%); 
+      margin: 30px 0; 
+      border-radius: 1px; 
+    }
+    p { 
+      margin: 15px 0; 
+      color: #4a5568; 
+    }
+    strong { 
+      color: #2d3748; 
+      font-weight: 600; 
+    }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="header">
+      <!-- Simtree Logo -->
+      <img src="cid:logoST" alt="Simtree - Corporate Travel SIM" class="logo" style="max-width: 250px; height: auto; margin-bottom: 20px; display: block;"/>
+      <h1>eSIM Plan Renewed</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">Hello {{employeeName}},</div>
+      <p>Excellent news! Your eSIM plan has been automatically renewed with fresh data. Continue using your existing eSIM without any interruption.</p>
+      
+      <div class="details">
+        <h3 style="color: #2d3748; margin-bottom: 15px;">Renewal Details</h3>
+        <p><strong>Plan:</strong> {{planName}}</p>
+        <p><strong>ICCID:</strong> {{iccid}}</p>
+        <p><strong>New Expiry Date:</strong> {{newExpiryDate}}</p>
+        <p><strong>Company:</strong> {{companyName}}</p>
+      </div>
+      
+      <p>Your eSIM data allocation has been reset and you now have a fresh data allowance according to your plan specifications.</p>
+      
+      <div class="button-center">
+        <a href="#" class="button">View Dashboard</a>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <p><strong>Auto-Renewal Settings:</strong> You can disable auto-renewal for future plans in your account settings if desired.</p>
+      
+      <p style="text-align: center;">Questions about your renewed eSIM? Contact your company administrator for assistance.</p>
+      <p style="text-align: center;"><strong>Stay connected,</strong><br>The Simtree Team</p>
+    </div>
+    
+    <div class="footer">
+      <strong>Simtree</strong> - Enterprise eSIM Solutions<br>
+      <span>&copy; {{year}} Simtree. All rights reserved.</span><br>
+      <small>This is an automated message</small>
+    </div>
+  </div>
+</body>
+</html>

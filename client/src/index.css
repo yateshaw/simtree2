@@ -1,0 +1,374 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Email Template Preview Styles */
+.preview-container {
+  contain: layout style;
+  box-sizing: border-box;
+}
+
+.preview-container * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.preview-container img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.preview-container table {
+  max-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.preview-container .qr-image {
+  max-width: 200px !important;
+  height: auto !important;
+}
+ 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+ 
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+ 
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+ 
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+ 
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+ 
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+ 
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+ 
+@layer base {
+  :root {
+    --cursor-default: default;
+  }
+  
+  *, *::before, *::after {
+    @apply border-border;
+    cursor: var(--cursor-default) !important;
+  }
+  
+  html, body {
+    @apply bg-background text-foreground;
+    cursor: var(--cursor-default) !important;
+    user-select: none;
+  }
+  
+  /* Ensure text cursor only appears on actual text input elements */
+  input[type="text"]:not([readonly]):not([disabled]),
+  input[type="email"]:not([readonly]):not([disabled]),
+  input[type="password"]:not([readonly]):not([disabled]),
+  input[type="search"]:not([readonly]):not([disabled]),
+  input[type="tel"]:not([readonly]):not([disabled]),
+  input[type="url"]:not([readonly]):not([disabled]),
+  input[type="number"]:not([readonly]):not([disabled]),
+  textarea:not([readonly]):not([disabled]),
+  [contenteditable="true"] {
+    cursor: text !important;
+    user-select: text !important;
+  }
+  
+  /* Force default cursor on all other elements */
+  div, span, p, h1, h2, h3, h4, h5, h6, section, article, aside, nav, header, footer, main {
+    cursor: default !important;
+  }
+  
+  /* Reset cursor for clickable elements */
+  button,
+  [role="button"],
+  a,
+  .cursor-pointer,
+  [onclick] {
+    cursor: pointer !important;
+  }
+  
+  /* Force default cursor on table elements */
+  table, thead, tbody, tr, td, th {
+    cursor: default !important;
+  }
+  
+  /* Override any other cursor styles that might be interfering */
+  html, body, #root, [data-testid], [class*="card"], [class*="Card"] {
+    cursor: default !important;
+  }
+  
+  /* Specifically target common UI elements */
+  .bg-card, .bg-background, .bg-white, .bg-gray-50, .bg-gray-100 {
+    cursor: default !important;
+  }
+}
+
+/* Stripe Element Styles */
+.stripe-element {
+  width: 100%;
+  padding: 10px;
+  min-height: 30px;
+  position: relative;
+  z-index: 999; /* Ensure the element is on top */
+  background-color: transparent; /* Make sure the background is transparent */
+}
+
+.stripe-element--focus {
+  box-shadow: 0 0 0 1px rgba(50, 151, 211, 0.3), 0 1px 1px 0 rgba(0, 0, 0, 0.07), 0 0 0 4px rgba(50, 151, 211, 0.3);
+  -webkit-transition: all 150ms ease;
+  transition: all 150ms ease;
+}
+
+.stripe-element--invalid {
+  border-color: #fa755a;
+}
+
+.stripe-element--webkit-autofill {
+  background-color: #fefde5 !important;
+}
+
+/* Ensure Stripe elements are accessible and clickable */
+.stripe-element div[id^="card-"],
+#stripe-payment-form div[id^="card-"],
+.StripeElement div[id^="card-"] {
+  min-height: 40px;
+  cursor: text;
+  position: relative;
+  z-index: 10;
+}
+
+/* For all Stripe container divs */
+div[id$="-container"] {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Make the Stripe iframes visible and accessible */
+.__PrivateStripeElement,
+.__PrivateStripeElement iframe {
+  opacity: 1 !important;
+  position: relative !important;
+  z-index: 999 !important;
+  pointer-events: auto !important;
+}
+
+/* Fix for Stripe Elements - make parent divs not interfere with iframe clicks */
+div[id$="-element"] > div {
+  position: static !important;
+}
+
+/* Fix z-index issues with Stripe Elements */
+.StripeElement {
+  z-index: 999 !important;
+}
+
+/* Remove any overlay divs that might block interaction */
+div[id$="-container"] > div:not(.__PrivateStripeElement) {
+  pointer-events: none !important;
+}
+
+/* ReactQuill editor */
+.ql-toolbar.ql-snow {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.ql-container.ql-snow {
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.ql-editor {
+  max-height: 450px;
+  overflow-y: auto;
+}
+
+/* Excalidraw-style draggable elements */
+.excalidraw-element {
+  position: relative;
+  cursor: move;
+  user-select: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.excalidraw-element.selected {
+  border: 1px solid #4a6cf7;
+  box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.2);
+}
+
+.element-content {
+  position: relative;
+}
+
+.excalidraw-image {
+  display: block;
+  border-radius: 4px;
+}
+
+.excalidraw-text, .excalidraw-button, .excalidraw-shape {
+  cursor: move;
+}
+
+/* Element controls */
+.element-controls {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: white;
+  border: 1px solid #4a6cf7;
+  border-radius: 50%;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.top-left {
+  top: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+
+.top-right {
+  top: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+
+.bottom-left {
+  bottom: -4px;
+  left: -4px;
+  cursor: nesw-resize;
+}
+
+.bottom-right {
+  bottom: -4px;
+  right: -4px;
+  cursor: nwse-resize;
+}
+
+.rotation-handle {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: white;
+  border: 1px solid #4a6cf7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4a6cf7;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.delete-button {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  color: white;
+  border: 1px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 20;
+}
+
+.element-toolbar {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 2px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.toolbar-button {
+  background-color: transparent;
+  border: none;
+  padding: 4px;
+  margin: 0 2px;
+  border-radius: 4px;
+  color: #4a6cf7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-button:hover {
+  background-color: #f1f5f9;
+}

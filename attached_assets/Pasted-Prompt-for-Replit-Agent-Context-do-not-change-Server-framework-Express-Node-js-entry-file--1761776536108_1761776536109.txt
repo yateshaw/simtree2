@@ -1,0 +1,178 @@
+Prompt for Replit Agent
+
+Context (do not change):
+
+Server framework: Express (Node.js) – entry file server/index.ts.
+
+Database: PostgreSQL on Neon using @neondatabase/serverless Pool + Drizzle client (both exported from server/db.ts).
+
+Email system: sendEmail(to: string, subject: string, html: string, text: string): Promise<boolean> in server/services/email.service.ts (SendGrid configured; default “from”: Simtree <${process.env.SENDGRID_FROM_EMAIL}> or fallback Simtree <hey@simtree.co>).
+
+System config table: system_config in shared/schema.ts.
+
+Config service: server/services/config.service.ts with getSystemConfig(key, defaultValue) and setSystemConfig(key, value, category, description).
+
+Super admin user: the “sadmin” account (super-admin role).
+
+Goal
+
+Implement a “Neon DB Usage Monitor” system that:
+
+Periodically checks storage and connection usage for the Neon database.
+
+Runs as a background job tied to the super admin (sadmin) user.
+
+Sends a single daily alert email to yateshaw@gmail.com (or process.env.ALERT_EMAIL_TO) when usage ≥ 90% of free-tier limits.
+
+Uses the existing sendEmail() function and ConfigService for throttling.
+
+Runs on a dual-cron schedule:
+
+Connections: every 5 minutes
+
+Storage: every 1 hour
+
+Implementation Plan (exact paths & behavior)
+
+Create: server/monitor/dbUsageMonitor.ts
+
+Export startDbUsageMonitor() and internal functions:
+
+checkConnections()
+
+checkStorage()
+
+Controlled by USAGE_MONITOR_ENABLED env var.
+
+Uses the pooled db / pool from server/db.ts.
+
+Queries:
+
+SELECT pg_database_size(current_database()) AS db_size_bytes;
+SELECT COUNT(*)::int AS active_conns
+FROM pg_stat_activity
+WHERE datname = current_database();
+
+
+Thresholds:
+
+storageRatio = db_size_bytes / NEON_FREE_TIER_BYTES
+
+connRatio = active_conns / NEON_MAX_CONN
+
+Trigger if either ≥ USAGE_THRESHOLD.
+
+Throttling:
+
+Store last sent timestamps in system_config via ConfigService using keys:
+
+db_usage_alert_last_sent_iso_connections
+
+db_usage_alert_last_sent_iso_storage
+
+Category: 'server'
+
+Skip sending if last alert < 24 hours.
+
+Recipient logic:
+
+Only send the alert if the authenticated user is sadmin (super-admin role).
+
+If other users are logged in or scheduled job runs under a different account, skip silently.
+
+Email recipient = process.env.ALERT_EMAIL_TO (default yateshaw@gmail.com).
+
+Email content (HTML + text):
+
+Subject:
+
+Connections → ⚠️ Neon DB connections near free-tier limit
+
+Storage → ⚠️ Neon DB storage near free-tier limit
+
+Body includes:
+
+Timestamp (UTC ISO)
+
+Usage vs. limit (e.g., 2.8 / 3 connections (93%))
+
+Threshold (e.g., 90%)
+
+Next alert earliest time (lastSent + 24h)
+
+Tip section: “Consider cleaning old data (connection_logs, plan_history, etc.) or upgrading Neon plan.”
+
+Sent via sendEmail() (no new dependencies).
+
+Add Environment Variables (in .env and .env.example)
+
+USAGE_MONITOR_ENABLED=true
+CONN_MONITOR_CRON="*/5 * * * *"
+STORAGE_MONITOR_CRON="0 * * * *"
+USAGE_THRESHOLD=0.9
+NEON_FREE_TIER_BYTES=1073741824
+NEON_MAX_CONN=3
+ALERT_EMAIL_TO="yateshaw@gmail.com"
+
+
+Scheduler Setup
+
+Use the existing job scheduling pattern in your app (same as other background jobs).
+
+If already using node-cron, add two jobs:
+
+CONN_MONITOR_CRON → checkConnections()
+
+STORAGE_MONITOR_CRON → checkStorage()
+
+If not, use the minimal existing scheduler or fallback to setInterval (respecting cron strings only if the project already uses node-cron).
+
+Do not add new scheduling dependencies unless already present.
+
+Integration in server/index.ts
+
+After Express starts:
+
+import { startDbUsageMonitor } from "./monitor/dbUsageMonitor";
+if (process.env.USAGE_MONITOR_ENABLED === "true") {
+  startDbUsageMonitor();
+  console.log("✅ DB Usage Monitor active (connections: %s, storage: %s)", process.env.CONN_MONITOR_CRON, process.env.STORAGE_MONITOR_CRON);
+}
+
+
+Ensure the monitor runs under the sadmin context, or checks for sadmin before sending any emails.
+
+Acceptance Criteria
+| # | Requirement | Description |
+|---|--------------|--------------|
+| ✅ | Dual-cron scheduling | Connections every 5 min, Storage every 1 h |
+| ✅ | Throttled alerts | Max one email per 24h per alert type |
+| ✅ | Uses ConfigService | Store timestamps in system_config |
+| ✅ | Reuses existing mailer | sendEmail() with SendGrid |
+| ✅ | sadmin-only | Only the sadmin user can receive or trigger alerts |
+| ✅ | Safe resource use | Reuses existing Neon pool, no extra connections |
+| ✅ | Clear logging | For each run, threshold hit, email sent, or throttled |
+
+Manual Test Plan
+
+Temporarily set USAGE_THRESHOLD=0.000001 and log in as sadmin → run → expect two alert emails (connections + storage).
+
+Check system_config → both timestamps updated.
+
+Run again within 24h → no new emails.
+
+Log in as a non-admin user → no emails sent.
+
+Backdate one key in system_config → that alert triggers again.
+
+Restore USAGE_THRESHOLD=0.9, deploy to Replit.
+
+Deliverables
+
+New file: server/monitor/dbUsageMonitor.ts
+
+Updated: server/index.ts (to start the monitor)
+
+Updated: .env.example (new vars)
+
+Short README section: “DB Usage Monitor (sadmin-only, dual-cron, 24h throttle, SendGrid mailer reuse)”

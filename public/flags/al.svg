@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800px" height="600px" viewBox="0 0 800 600" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <!-- Albania flag -->
+    <rect width="800" height="600" fill="#e41e20"/>
+    <path d="M400,125 L475,375 L600,400 L475,425 L400,500 L325,425 L200,400 L325,375 Z" fill="#000"/>
+    <path d="M400,175 L450,350 L550,375 L450,400 L400,475 L350,400 L250,375 L350,350 Z" fill="#e41e20"/>
+</svg>

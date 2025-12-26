@@ -1,0 +1,173 @@
+🚀 PROMPT FINAL PARA EL REPLIT AGENT
+
+Title:
+Safe Implementation of Automated Daily Neon DB Backup to Google Drive (Preserve all existing functionality)
+
+Prompt:
+
+You are working on a production-ready TypeScript SaaS app called **eSIM Management Platform**, deployed on Replit.
+
+⚠️ CRITICAL RULE:
+All existing functionalities, modules, routes, jobs, authentication flows, and APIs must remain 100% functional and unaffected after these changes.
+Do not modify, refactor, or remove any existing code beyond what is explicitly required for this backup feature.
+Integrate new logic safely as separate files and services following current architecture conventions.
+
+---
+
+### 🧠 Context
+
+**App Overview**
+This is a B2B multi-tenant eSIM Management Platform used by telecom and enterprise clients.  
+It handles company accounts, executives, eSIM provisioning, billing, Stripe payments, and wallet balances.
+
+**Backend:**
+- Node.js + Express (TypeScript)
+- Drizzle ORM + Neon PostgreSQL
+- Passport.js + express-session for auth
+- SendGrid email system via `sendEmail(to, subject, html, text)`
+- Cron jobs via node-cron for billing and renewals
+- `ConfigService` handles key/value storage via `system_config` table
+
+**Environment Secrets (already configured in Replit):**
+- `DATABASE_URL` → Neon PostgreSQL connection string
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` → full Google Service Account credentials (JSON)
+- `DRIVE_FOLDER_ID` → Google Drive folder for storing backups
+
+**Deployment:**
+- Replit (Cloud Run)
+- Database: Neon PostgreSQL (serverless)
+- Uses Drizzle for migrations
+- Port: 5000
+
+---
+
+### 🎯 Goal
+
+Add a **safe, self-contained automated daily database backup system** that:
+
+1. Dumps the Neon PostgreSQL database using `pg_dump`.
+2. Compresses the output to `.sql.gz`.
+3. Uploads the backup file to **Google Drive**, using the folder from `DRIVE_FOLDER_ID`.
+4. Retains only the **14 most recent backups** (older ones auto-deleted).
+5. Logs backups to a new `backups` table in the database.
+6. Sends a notification email to `yateshaw@gmail.com` after every run (success or error).
+7. Exposes two new admin-only endpoints:
+   - `POST /admin/backup/run-now` → run backup immediately
+   - `GET /admin/backup/history` → view backup logs
+8. Runs automatically every day at **03:00 AM Buenos Aires time**.
+9. Must operate independently and not alter or break any existing system logic.
+
+---
+
+### 🧩 Implementation Plan
+
+#### 1) Dependencies
+- Add: `googleapis`, `google-auth-library`, and `node-cron`
+- In `replit.nix`, include `pkgs.postgresql_15` to enable `pg_dump`
+- Add npm scripts:
+  - `"backup:run": "ts-node server/jobs/backup-db.job.ts"`
+  - `"backup:config": "ts-node scripts/set-backup-config.ts"`
+
+#### 2) Google Drive Service
+File: `server/services/drive.service.ts`
+- Authenticate using `process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON`
+- Scopes: `https://www.googleapis.com/auth/drive.file`
+- Implement:
+  - `uploadFile({ name, mimeType, readableStream, parents })`
+  - `listFiles(folderId)` → ordered by creation date
+  - `deleteFile(fileId)`
+- Always use `process.env.DRIVE_FOLDER_ID` as the target folder.
+
+#### 3) Backup Table
+Migration + schema in Drizzle:
+
+
+CREATE TABLE backups (
+id SERIAL PRIMARY KEY,
+created_at TIMESTAMP DEFAULT NOW(),
+filename TEXT NOT NULL,
+size_bytes BIGINT,
+drive_file_id TEXT,
+status TEXT CHECK (status IN ('SUCCESS','ERROR')),
+error TEXT
+);
+
+
+#### 4) Backup Job
+File: `server/jobs/backup-db.job.ts`
+- Use `child_process.spawn` to run `pg_dump` with `$DATABASE_URL`
+- Pipe stdout → gzip → Google Drive upload stream
+- Filename example: `simtree-backup-YYYYMMDD-HHmm.sql.gz`
+- Insert a record in `backups` table with metadata
+- On success/failure, send email via `sendEmail()`
+
+#### 5) Retention Policy
+After upload:
+- `listFiles(DRIVE_FOLDER_ID)` sorted descending by `createdTime`
+- Keep newest 14 files
+- Delete older ones using `deleteFile()`
+
+#### 6) Scheduler
+File: `server/index.ts`
+- Import node-cron
+- Schedule `'0 3 * * *'` (03:00 AM Buenos Aires)
+- Job calls `backupDbJob.run()`
+- Must execute only in production environment (`NODE_ENV === 'production'`)
+
+#### 7) Admin Routes
+File: `server/routes/admin-backup.routes.ts`
+- `POST /admin/backup/run-now` → triggers job
+- `GET /admin/backup/history` → returns last 10 rows
+- Protect routes with existing super_admin guard
+
+#### 8) Email Notifications
+Use `sendEmail()`:
+- ✅ Success:
+  - Subject: `✅ DB Backup Successful`
+  - Body: filename, Drive link, size, timestamp
+- ❌ Error:
+  - Subject: `❌ DB Backup Failed`
+  - Body: error message, stderr tail
+
+#### 9) Safety & Integration Rules
+- Do not change or reformat existing server logic.
+- All new files must be modular and non-invasive.
+- No refactoring of unrelated imports or middleware.
+- Reuse existing error handling and logging patterns.
+- Avoid blocking operations or large in-memory buffers.
+- Log backup events clearly in the console.
+
+#### 10) Validation Steps
+1. Run `npm run backup:run` → creates backup in Drive.
+2. Verify row created in `backups` table.
+3. Confirm success email.
+4. Test `/admin/backup/run-now` and `/admin/backup/history`.
+
+---
+
+### ✅ Deliverables
+- `server/services/drive.service.ts`
+- `server/jobs/backup-db.job.ts`
+- `server/routes/admin-backup.routes.ts`
+- New Drizzle migration for `backups` table
+- Updated `package.json` and `replit.nix`
+- Cron job configured at 03:00 AM Buenos Aires (production only)
+- Emails working via SendGrid
+- README updated with configuration instructions
+
+---
+
+### 🌎 Environment Variables
+- `DATABASE_URL`
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+- `DRIVE_FOLDER_ID`
+- Timezone: `America/Argentina/Buenos_Aires`
+
+---
+
+**Final Check:**
+After deployment:
+- `POST /admin/backup/run-now` → uploads `.sql.gz` to Google Drive  
+- Inserts record in `backups`  
+- Sends success email  
+- No existing routes or jobs are modified or broken.

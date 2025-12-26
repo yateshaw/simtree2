@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simtree | eSIM Management Platform</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/images/logo chip.png">
+    <!-- Preload the Stripe.js for faster loading -->
+    <link rel="preload" href="https://js.stripe.com/v3/" as="script">
+    <script src="https://js.stripe.com/v3/" defer></script>
+    <!-- Script to disable error overlays -->
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        // Attempt to disable runtime error overlay after page loads
+        if (window.__vite_plugin_react_runtime_error_overlay) {
+          window.__vite_plugin_react_runtime_error_overlay.disabled = true;
+        }
+        
+        // Close any existing error overlays
+        setTimeout(() => {
+          const errorOverlays = document.querySelectorAll('[data-vite-dev-error-overlay="true"]');
+          errorOverlays.forEach(overlay => {
+            overlay.remove();
+          });
+        }, 1000);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Add a base URL to ensure paths are resolved correctly -->
+    <base href="/" />
+    <!-- Ensure proper module loading -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

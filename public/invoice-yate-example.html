@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tax Invoice BILL-20251024-0001</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      background-color: white;
+    }
+    .invoice-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 0;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+    }
+    .logo-section {
+      display: flex;
+      align-items: center;
+    }
+    .logo {
+      height: 100px;
+      width: auto;
+      object-fit: contain;
+      max-width: 300px;
+    }
+    .invoice-title {
+      text-align: right;
+    }
+    .invoice-number {
+      font-size: 24px;
+      color: #059669;
+      font-weight: 600;
+      margin: 0;
+    }
+    .invoice-dates {
+      display: flex;
+      justify-content: space-between;
+      margin: 30px 0;
+    }
+    .date-section {
+      color: #6b7280;
+    }
+    .date-label {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .bill-to {
+      text-align: right;
+      margin: 30px 0;
+    }
+    .bill-to h3 {
+      margin: 0 0 10px 0;
+      font-weight: 600;
+      color: #374151;
+    }
+    .bill-to p {
+      margin: 2px 0;
+      color: #6b7280;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 40px 0;
+      border: 1px solid #e5e7eb;
+    }
+    .items-table th {
+      background-color: #f9fafb;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #374151;
+      border: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+    .items-table td {
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+    .items-table .qty-col {
+      text-align: center;
+      width: 80px;
+    }
+    .items-table .price-col {
+      text-align: right;
+      width: 120px;
+    }
+    .total-section {
+      margin-top: 40px;
+      text-align: right;
+    }
+    .total-row {
+      display: flex;
+      justify-content: flex-end;
+      margin: 8px 0;
+    }
+    .total-label {
+      width: 150px;
+      text-align: right;
+      padding-right: 20px;
+      font-weight: 600;
+    }
+    .total-amount {
+      width: 120px;
+      text-align: right;
+      font-weight: 600;
+    }
+    .final-total {
+      border-top: 2px solid #374151;
+      padding-top: 10px;
+      margin-top: 10px;
+      font-size: 18px;
+      color: #059669;
+    }
+    .company-details {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 60px;
+      padding-top: 30px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 14px;
+      color: #6b7280;
+    }
+    .company-info h4 {
+      margin: 0 0 10px 0;
+      color: #374151;
+      font-weight: 600;
+    }
+    .company-info p {
+      margin: 2px 0;
+    }
+    .payment-info h4 {
+      margin: 0 0 10px 0;
+      color: #374151;
+      font-weight: 600;
+    }
+    .payment-info p {
+      margin: 2px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-container">
+    <div class="header">
+      <div class="logo-section">
+        <img src="/images/logoST.png" alt="Company Logo" class="logo" />
+      </div>
+      <div class="invoice-title">
+        <h2 class="invoice-number">Tax Invoice # BILL-20251024-0001</h2>
+      </div>
+    </div>
+
+    <div class="invoice-dates">
+      <div class="date-section">
+        <div class="date-label">Invoice Date: October 24, 2025</div>
+      </div>
+      <div class="bill-to">
+        <h3>BILL TO</h3>
+        <p><strong>YATE LLC</strong></p>
+        <p>Av. Centenario 2515 - 3B</p>
+        <p>Argentina</p>
+        <p>TRN: 30-70763014-7</p>
+        <p>Contact: Juan Pablo Maria Shaw</p>
+        <p>Email: yateshaw@gmail.com</p>
+      </div>
+    </div>
+
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>DESCRIPTION</th>
+          <th class="qty-col">QTY</th>
+          <th class="price-col">UNIT PRICE</th>
+          <th class="price-col">SUBTOTAL</th>
+          <th class="price-col">VAT</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>Global eSIM - South America 30 Days</strong>
+            <br><small style="color: #6b7280;">15GB Data • 30 Days Validity • Argentina, Brazil, Chile</small>
+          </td>
+          <td class="qty-col">5</td>
+          <td class="price-col">AED 92.00</td>
+          <td class="price-col">AED 460.00</td>
+          <td class="price-col">AED 0.00 (0%)</td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Global eSIM - North America</strong>
+            <br><small style="color: #6b7280;">20GB Data • 30 Days Validity • USA, Canada, Mexico</small>
+          </td>
+          <td class="qty-col">3</td>
+          <td class="price-col">AED 110.00</td>
+          <td class="price-col">AED 330.00</td>
+          <td class="price-col">AED 0.00 (0%)</td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Global eSIM - Europe Premium</strong>
+            <br><small style="color: #6b7280;">25GB Data • 30 Days Validity • 32 European Countries</small>
+          </td>
+          <td class="qty-col">2</td>
+          <td class="price-col">AED 147.00</td>
+          <td class="price-col">AED 294.00</td>
+          <td class="price-col">AED 0.00 (0%)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="total-section">
+      <div class="total-row">
+        <div class="total-label">SUBTOTAL</div>
+        <div class="total-amount">AED 1,084.00</div>
+      </div>
+      <div class="total-row">
+        <div class="total-label">VAT</div>
+        <div class="total-amount">AED 0.00</div>
+      </div>
+      <div class="total-row final-total">
+        <div class="total-label">Total</div>
+        <div class="total-amount">AED 1,084.00</div>
+      </div>
+    </div>
+
+    <div class="company-details">
+      <div class="company-info">
+        <h4>SIMTREE FZC</h4>
+        <p>Business Centre, Sharjah Publishing City Free Zone</p>
+        <p>Sharjah, United Arab Emirates</p>
+        <p>Formation Number: 4421737</p>
+        <p>TRN: [Tax Registration Number]</p>
+        <p>Email: hey@simtree.co</p>
+        <p>Website: www.simtree.co</p>
+      </div>
+      <div class="payment-info">
+        <h4>Payment Information</h4>
+        <p>Payment Method: Automatic Wallet Deduction</p>
+        <p>Payment Status: Paid from Account Balance</p>
+        <p>For questions, please contact:</p>
+        <p>hey@simtree.co</p>
+        <p>Please reference invoice number in communications</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

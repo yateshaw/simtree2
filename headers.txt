@@ -1,0 +1,20 @@
+HTTP/1.1 200 OK
+Content-Security-Policy: default-src 'self';script-src 'self' 'unsafe-inline' 'unsafe-eval';connect-src 'self' ws: wss:;img-src 'self' data: blob:;style-src 'self' 'unsafe-inline';font-src 'self' data:;object-src 'none';base-uri 'self';form-action 'self';frame-ancestors 'none';script-src-attr 'none';upgrade-insecure-requests
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 0
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Permitted-Cross-Domain-Policies: none
+Vary: Origin
+Content-Type: text/html; charset=utf-8
+Date: Sat, 26 Jul 2025 21:10:16 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Content-Length: 3497
+

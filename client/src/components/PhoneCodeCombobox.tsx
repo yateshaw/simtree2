@@ -1,0 +1,100 @@
+
+// /src/components/PhoneCodeCombobox.tsx
+import * as React from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import { COUNTRIES, Country } from "@/data/countries";
+
+type Props = {
+  value?: string;                // e.g. "+54"
+  onChange: (val: string) => void;
+  className?: string;
+  placeholder?: string;
+};
+
+/** Combobox con búsqueda (por país, código o nombre) y banderas */
+export function PhoneCodeCombobox({
+  value,
+  onChange,
+  className,
+  placeholder = "Select",
+}: Props) {
+  const [open, setOpen] = React.useState(false);
+
+  // Unificar por código telefónico (p.ej. varios países comparten +1)
+  const options: Country[] = React.useMemo(() => {
+    const map = new Map<string, Country>();
+    for (const c of COUNTRIES) if (!map.has(c.phone)) map.set(c.phone, c);
+    return Array.from(map.values()).sort((a, b) => a.phone.localeCompare(b.phone));
+  }, []);
+
+  const selected = options.find((o) => o.phone === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-40 justify-between", className)}
+        >
+          {selected ? (
+            <div className="flex items-center gap-2 truncate">
+              <span className="text-base leading-none">{selected.flag}</span>
+              <span className="font-medium">{selected.phone}</span>
+              <span className="text-muted-foreground text-xs truncate max-w-[90px]">
+                {selected.name}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-72">
+        <Command>
+          <CommandInput placeholder="Search country or code…" />
+          <CommandEmpty>No country found.</CommandEmpty>
+          <CommandGroup className="max-h-64 overflow-auto">
+            {options.map((c) => (
+              <CommandItem
+                key={c.phone}
+                value={`${c.name} ${c.phone}`}
+                onSelect={() => {
+                  onChange(c.phone);
+                  setOpen(false);
+                }}
+                className="flex items-center gap-2"
+              >
+                <span className="text-base">{c.flag}</span>
+                <span className="font-medium">{c.phone}</span>
+                <span className="text-muted-foreground text-xs">{c.name}</span>
+                <Check
+                  className={cn(
+                    "ml-auto h-4 w-4",
+                    c.phone === value ? "opacity-100" : "opacity-0"
+                  )}
+                />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}

@@ -1,0 +1,35 @@
+{pkgs}: {
+  deps = [
+    pkgs.systemd
+    pkgs.xorg.libXext
+    pkgs.libxkbcommon
+    pkgs.xorg.libXtst
+    pkgs.xorg.libXi
+    pkgs.xorg.libXfixes
+    pkgs.xorg.libX11
+    pkgs.xorg.libXrandr
+    pkgs.xorg.libXdamage
+    pkgs.xorg.libXcomposite
+    pkgs.xorg.libxcb
+    pkgs.cairo
+    pkgs.pango
+    pkgs.nss
+    pkgs.nspr
+    pkgs.gdk-pixbuf
+    pkgs.freetype
+    pkgs.fontconfig
+    pkgs.expat
+    pkgs.dbus
+    pkgs.cups
+    pkgs.atk
+    pkgs.alsa-lib
+    pkgs.mesa
+    pkgs.libdrm
+    pkgs.gtk3
+    pkgs.glib
+    pkgs.psmisc
+    pkgs.lsof
+    pkgs.jq
+    pkgs.postgresql
+  ];
+}

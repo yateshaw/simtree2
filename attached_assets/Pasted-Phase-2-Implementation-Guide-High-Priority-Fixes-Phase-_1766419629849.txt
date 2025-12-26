@@ -1,0 +1,1087 @@
+Phase 2 Implementation Guide - High-Priority Fixes
+✅ Phase 1 Verification Checklist
+Before moving to Phase 2, verify your implementations:
+1. Test Sadmin Password Security
+bash# Test 1: Verify hashing on startup
+curl -X POST http://localhost:5000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"sadmin","password":"your-sadmin-password"}'
+
+# Expected: Should login successfully with hashed comparison
+
+# Test 2: Verify wrong password fails
+curl -X POST http://localhost:5000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"sadmin","password":"wrong-password"}'
+
+# Expected: 401 Unauthorized
+2. Test Wallet Transaction Locking (Race Condition Prevention)
+javascript// Create a test script: test-concurrent-purchases.js
+async function testConcurrentPurchases() {
+  const executiveId = 1; // Replace with test executive
+  const planId = 1; // Replace with test plan
+  
+  // Simulate 5 simultaneous purchases from same wallet
+  const purchases = Array(5).fill(null).map(() => 
+    fetch('http://localhost:5000/api/executives/1/assign-esim', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Cookie': 'your-session-cookie'
+      },
+      body: JSON.stringify({ planId, executiveId })
+    })
+  );
+  
+  const results = await Promise.all(purchases);
+  const successful = results.filter(r => r.ok).length;
+  
+  console.log(`Successful purchases: ${successful}`);
+  console.log(`Failed purchases: ${5 - successful}`);
+  
+  // Expected: Only purchases that fit within wallet balance should succeed
+  // No negative wallet balance should occur
+}
+3. Verify Production Environment Validation
+bash# Test startup without required env vars
+unset SESSION_SECRET
+NODE_ENV=production node dist/index.js
+
+# Expected: Server should exit immediately with error message
+# "❌ FATAL: SESSION_SECRET must be set in production"
+4. Test Stripe Webhook Signature
+bash# Test with invalid signature (should reject)
+curl -X POST http://localhost:5000/api/stripe/webhook \
+  -H "Content-Type: application/json" \
+  -H "stripe-signature: invalid_signature" \
+  -d '{"type":"payment_intent.succeeded"}'
+
+# Expected: 400 Bad Request - Webhook signature verification failed
+
+🟠 Phase 2: High-Priority Security & Reliability (Week 1)
+2.1 eSIM Provider Webhook Signature Verification
+Priority: 🔴 CRITICAL (External API security)
+Implementation
+typescript// server/middleware/webhook-verification.ts
+import crypto from 'crypto';
+
+export function verifyEsimWebhookSignature(
+  req: Request, 
+  res: Response, 
+  next: NextFunction
+) {
+  const signature = req.headers['x-esim-signature'] as string;
+  const timestamp = req.headers['x-esim-timestamp'] as string;
+  
+  if (!signature || !timestamp) {
+    console.error('Missing webhook signature or timestamp');
+    return res.status(401).json({ error: 'Missing authentication headers' });
+  }
+  
+  // Verify timestamp (prevent replay attacks)
+  const webhookTime = parseInt(timestamp);
+  const currentTime = Date.now();
+  const timeDifference = Math.abs(currentTime - webhookTime);
+  
+  // Reject webhooks older than 5 minutes
+  if (timeDifference > 300000) {
+    console.error(`Webhook timestamp too old: ${timeDifference}ms`);
+    return res.status(401).json({ error: 'Webhook expired' });
+  }
+  
+  // Verify HMAC signature
+  const payload = JSON.stringify(req.body);
+  const secret = process.env.ESIM_ACCESS_SECRET;
+  
+  if (!secret) {
+    console.error('ESIM_ACCESS_SECRET not configured');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(timestamp + payload) // Include timestamp in signature
+    .digest('hex');
+  
+  // Timing-safe comparison
+  if (!crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  )) {
+    console.error('Invalid webhook signature');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  
+  // Store webhook ID to prevent duplicates
+  const webhookId = req.body.id || req.body.eventId;
+  if (webhookId) {
+    req.webhookId = webhookId;
+  }
+  
+  next();
+}
+typescript// server/routes.ts - Apply middleware
+import { verifyEsimWebhookSignature } from './middleware/webhook-verification';
+
+router.post(
+  '/webhooks/esim-access',
+  verifyEsimWebhookSignature, // Add this middleware
+  async (req, res) => {
+    try {
+      // Check for duplicate webhook processing
+      const webhookId = req.webhookId;
+      if (webhookId) {
+        const existing = await db
+          .select()
+          .from(processedWebhooks)
+          .where(eq(processedWebhooks.webhookId, webhookId))
+          .limit(1);
+        
+        if (existing.length > 0) {
+          console.log(`Duplicate webhook ignored: ${webhookId}`);
+          return res.status(200).json({ received: true, duplicate: true });
+        }
+        
+        // Store webhook ID
+        await db.insert(processedWebhooks).values({
+          webhookId,
+          provider: 'esim-access',
+          processedAt: new Date()
+        });
+      }
+      
+      // Process webhook...
+      const { iccid, dataUsage, status } = req.body;
+      
+      // ... existing webhook processing logic ...
+      
+      res.status(200).json({ received: true });
+    } catch (error) {
+      console.error('Webhook processing error:', error);
+      res.status(500).json({ error: 'Processing failed' });
+    }
+  }
+);
+typescript// shared/schema.ts - Add processed webhooks table
+export const processedWebhooks = pgTable("processed_webhooks", {
+  id: serial("id").primaryKey(),
+  webhookId: varchar("webhook_id", { length: 255 }).notNull().unique(),
+  provider: varchar("provider", { length: 50 }).notNull(), // 'esim-access', 'stripe'
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+});
+
+// Add index for fast duplicate detection
+// CREATE INDEX idx_processed_webhooks_webhook_id ON processed_webhooks(webhook_id);
+Migration File
+sql-- migrations/004_webhook_processing.sql
+CREATE TABLE IF NOT EXISTS processed_webhooks (
+  id SERIAL PRIMARY KEY,
+  webhook_id VARCHAR(255) NOT NULL UNIQUE,
+  provider VARCHAR(50) NOT NULL,
+  processed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_processed_webhooks_webhook_id ON processed_webhooks(webhook_id);
+CREATE INDEX idx_processed_webhooks_processed_at ON processed_webhooks(processed_at);
+
+-- Cleanup old webhooks (older than 30 days)
+CREATE OR REPLACE FUNCTION cleanup_old_webhooks() RETURNS void AS $$
+BEGIN
+  DELETE FROM processed_webhooks 
+  WHERE processed_at < NOW() - INTERVAL '30 days';
+END;
+$$ LANGUAGE plpgsql;
+Testing
+bash# Test 1: Valid webhook with signature
+node -e "
+const crypto = require('crypto');
+const timestamp = Date.now().toString();
+const payload = JSON.stringify({
+  id: 'wh_test_123',
+  iccid: '8901234567890123456',
+  dataUsage: 500,
+  status: 'active'
+});
+const signature = crypto
+  .createHmac('sha256', process.env.ESIM_ACCESS_SECRET)
+  .update(timestamp + payload)
+  .digest('hex');
+
+console.log('Timestamp:', timestamp);
+console.log('Signature:', signature);
+console.log('Payload:', payload);
+"
+
+# Use output to test webhook
+curl -X POST http://localhost:5000/api/webhooks/esim-access \
+  -H "Content-Type: application/json" \
+  -H "x-esim-signature: <signature>" \
+  -H "x-esim-timestamp: <timestamp>" \
+  -d '<payload>'
+
+# Expected: 200 OK with { "received": true }
+
+# Test 2: Replay attack (old timestamp)
+curl -X POST http://localhost:5000/api/webhooks/esim-access \
+  -H "x-esim-timestamp: 1234567890000" \
+  ...
+
+# Expected: 401 Unauthorized - "Webhook expired"
+
+# Test 3: Duplicate webhook
+# Send same webhook twice with same ID
+# Expected: First = 200 OK, Second = 200 OK with {"duplicate": true}
+
+2.2 Distributed Job Locking (PostgreSQL Advisory Locks)
+Priority: 🟠 HIGH (Prevents duplicate backups in multi-instance deployments)
+Implementation
+typescript// server/utils/distributed-lock.ts
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
+import crypto from 'crypto';
+
+/**
+ * Converts a string lock name to a consistent integer for PostgreSQL advisory locks
+ */
+function stringToLockId(lockName: string): number {
+  const hash = crypto.createHash('md5').update(lockName).digest();
+  // Use first 4 bytes as signed 32-bit integer
+  return hash.readInt32BE(0);
+}
+
+export class DistributedLock {
+  private lockId: number;
+  private lockName: string;
+  private acquired: boolean = false;
+  
+  constructor(lockName: string) {
+    this.lockName = lockName;
+    this.lockId = stringToLockId(lockName);
+  }
+  
+  /**
+   * Try to acquire lock (non-blocking)
+   * Returns true if lock acquired, false if already held
+   */
+  async tryAcquire(): Promise<boolean> {
+    try {
+      const result = await db.execute(sql`
+        SELECT pg_try_advisory_lock(${this.lockId}) as acquired
+      `);
+      
+      this.acquired = result.rows[0]?.acquired === true;
+      
+      if (this.acquired) {
+        console.log(`✓ Acquired lock: ${this.lockName} (id: ${this.lockId})`);
+      } else {
+        console.log(`✗ Lock already held: ${this.lockName}`);
+      }
+      
+      return this.acquired;
+    } catch (error) {
+      console.error(`Failed to acquire lock ${this.lockName}:`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Acquire lock with timeout (blocking)
+   * Waits up to timeoutMs for lock to become available
+   */
+  async acquire(timeoutMs: number = 60000): Promise<boolean> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeoutMs) {
+      if (await this.tryAcquire()) {
+        return true;
+      }
+      
+      // Wait 1 second before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    console.error(`Lock acquisition timeout: ${this.lockName}`);
+    return false;
+  }
+  
+  /**
+   * Release the lock
+   */
+  async release(): Promise<void> {
+    if (!this.acquired) {
+      console.warn(`Attempted to release unheld lock: ${this.lockName}`);
+      return;
+    }
+    
+    try {
+      await db.execute(sql`
+        SELECT pg_advisory_unlock(${this.lockId})
+      `);
+      
+      this.acquired = false;
+      console.log(`✓ Released lock: ${this.lockName}`);
+    } catch (error) {
+      console.error(`Failed to release lock ${this.lockName}:`, error);
+    }
+  }
+  
+  /**
+   * Execute a function with automatic lock management
+   */
+  async withLock<T>(
+    fn: () => Promise<T>,
+    timeoutMs: number = 60000
+  ): Promise<T | null> {
+    const acquired = await this.tryAcquire();
+    
+    if (!acquired) {
+      console.log(`Skipping execution - lock held by another process`);
+      return null;
+    }
+    
+    try {
+      return await fn();
+    } finally {
+      await this.release();
+    }
+  }
+}
+
+/**
+ * Helper function for common pattern
+ */
+export async function withDistributedLock<T>(
+  lockName: string,
+  fn: () => Promise<T>
+): Promise<T | null> {
+  const lock = new DistributedLock(lockName);
+  return lock.withLock(fn);
+}
+Apply to Backup Jobs
+typescript// server/jobs/backup-db.job.ts
+import { DistributedLock } from '../utils/distributed-lock';
+
+export function scheduleDailyBackup() {
+  // Buenos Aires timezone: 3:00 AM
+  cron.schedule('0 3 * * *', async () => {
+    console.log('📅 Daily backup job triggered');
+    
+    const lock = new DistributedLock('daily-backup-job');
+    
+    const result = await lock.withLock(async () => {
+      try {
+        console.log('🔄 Starting daily database backup...');
+        
+        // Existing backup logic
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `simtree-daily-backup-${timestamp}.sql.gz`;
+        
+        // ... rest of backup code ...
+        
+        return { success: true, filename };
+      } catch (error) {
+        console.error('❌ Daily backup failed:', error);
+        
+        // Send alert email
+        await sendBackupFailureEmail(error);
+        
+        return { success: false, error };
+      }
+    });
+    
+    if (result === null) {
+      console.log('⏭️  Backup skipped - another instance is running');
+    } else if (result.success) {
+      console.log('✅ Daily backup completed:', result.filename);
+    }
+  });
+}
+typescript// server/jobs/backup-hourly.job.ts
+import { withDistributedLock } from '../utils/distributed-lock';
+
+export function scheduleHourlyBackup() {
+  cron.schedule('0 * * * *', async () => {
+    console.log('📅 Hourly backup job triggered');
+    
+    await withDistributedLock('hourly-backup-job', async () => {
+      console.log('🔄 Starting hourly incremental backup...');
+      
+      // Existing hourly backup logic
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `simtree-hourly-backup-${timestamp}.sql.gz`;
+      
+      // ... rest of backup code ...
+      
+      return { success: true, filename };
+    });
+  });
+}
+typescript// server/cron/esim-status-sync.ts - Apply to all background jobs
+import { withDistributedLock } from '../utils/distributed-lock';
+
+export function scheduleEsimPlanSync() {
+  cron.schedule('0 4 * * *', async () => {
+    await withDistributedLock('esim-plan-sync', async () => {
+      console.log('🔄 Syncing eSIM plans from provider...');
+      
+      const plans = await esimAccessService.getAllPlans();
+      // ... sync logic ...
+      
+      return { synced: plans.length };
+    });
+  });
+}
+Testing
+typescript// test/distributed-lock.test.ts
+import { DistributedLock } from '../server/utils/distributed-lock';
+
+describe('DistributedLock', () => {
+  test('prevents concurrent execution', async () => {
+    const lock1 = new DistributedLock('test-lock');
+    const lock2 = new DistributedLock('test-lock');
+    
+    const acquired1 = await lock1.tryAcquire();
+    expect(acquired1).toBe(true);
+    
+    const acquired2 = await lock2.tryAcquire();
+    expect(acquired2).toBe(false); // Should fail
+    
+    await lock1.release();
+    
+    const acquired3 = await lock2.tryAcquire();
+    expect(acquired3).toBe(true); // Should succeed now
+    
+    await lock2.release();
+  });
+  
+  test('withLock auto-releases on error', async () => {
+    const lock = new DistributedLock('error-test');
+    
+    try {
+      await lock.withLock(async () => {
+        throw new Error('Test error');
+      });
+    } catch (error) {
+      // Lock should be released even on error
+    }
+    
+    // Verify lock is available
+    const newLock = new DistributedLock('error-test');
+    const acquired = await newLock.tryAcquire();
+    expect(acquired).toBe(true);
+    
+    await newLock.release();
+  });
+});
+bash# Manual test: Run backup job simultaneously in two terminals
+# Terminal 1:
+node -e "require('./dist/jobs/backup-db.job').runBackupNow()"
+
+# Terminal 2 (immediately):
+node -e "require('./dist/jobs/backup-db.job').runBackupNow()"
+
+# Expected: Terminal 1 runs backup, Terminal 2 logs "Backup skipped"
+
+2.3 Email Retry Mechanism with Exponential Backoff
+Priority: 🟠 HIGH (Critical emails like eSIM activation must not be lost)
+Implementation
+typescript// server/services/email-retry.service.ts
+import { db } from '../db';
+import { failedEmails } from '../../shared/schema';
+import { sendEmail } from './email.service';
+
+interface EmailData {
+  to: string | string[];
+  subject: string;
+  template: string;
+  templateData: Record<string, any>;
+  priority?: 'critical' | 'high' | 'normal' | 'low';
+}
+
+export class EmailRetryService {
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_DELAYS = [1000, 5000, 15000]; // 1s, 5s, 15s
+  
+  /**
+   * Send email with automatic retry logic
+   */
+  static async sendWithRetry(emailData: EmailData): Promise<boolean> {
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        await sendEmail(emailData);
+        
+        console.log(`✅ Email sent successfully on attempt ${attempt}/${this.MAX_RETRIES}`);
+        console.log(`   To: ${emailData.to}`);
+        console.log(`   Subject: ${emailData.subject}`);
+        
+        return true;
+        
+      } catch (error: any) {
+        console.error(`❌ Email attempt ${attempt}/${this.MAX_RETRIES} failed:`, {
+          to: emailData.to,
+          subject: emailData.subject,
+          error: error.message
+        });
+        
+        // If this was the last attempt, log to database
+        if (attempt === this.MAX_RETRIES) {
+          await this.logFailedEmail(emailData, error, attempt);
+          
+          // For critical emails, send alert to admin
+          if (emailData.priority === 'critical') {
+            await this.sendFailureAlert(emailData, error);
+          }
+          
+          return false;
+        }
+        
+        // Exponential backoff before retry
+        const delay = this.RETRY_DELAYS[attempt - 1];
+        console.log(`   Retrying in ${delay}ms...`);
+        await this.sleep(delay);
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Log failed email to database for manual review
+   */
+  private static async logFailedEmail(
+    emailData: EmailData,
+    error: Error,
+    attemptCount: number
+  ): Promise<void> {
+    try {
+      await db.insert(failedEmails).values({
+        recipient: Array.isArray(emailData.to) ? emailData.to.join(',') : emailData.to,
+        subject: emailData.subject,
+        template: emailData.template,
+        templateData: JSON.stringify(emailData.templateData),
+        attemptCount,
+        lastError: error.message,
+        priority: emailData.priority || 'normal',
+        createdAt: new Date()
+      });
+      
+      console.log('📝 Failed email logged to database for manual review');
+    } catch (dbError) {
+      console.error('Failed to log email failure to database:', dbError);
+    }
+  }
+  
+  /**
+   * Send alert to admin for critical email failures
+   */
+  private static async sendFailureAlert(
+    emailData: EmailData,
+    error: Error
+  ): Promise<void> {
+    try {
+      // Don't retry this alert email - best effort only
+      await sendEmail({
+        to: process.env.ADMIN_EMAIL || process.env.SENDER_EMAIL,
+        subject: '🚨 Critical Email Delivery Failure',
+        template: 'email-failure-alert',
+        templateData: {
+          failedRecipient: emailData.to,
+          failedSubject: emailData.subject,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (alertError) {
+      console.error('Failed to send failure alert:', alertError);
+    }
+  }
+  
+  /**
+   * Retry all failed emails from database (admin utility)
+   */
+  static async retryFailedEmails(maxAge: number = 24): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - maxAge);
+    
+    const failed = await db
+      .select()
+      .from(failedEmails)
+      .where(
+        and(
+          gte(failedEmails.createdAt, cutoffDate),
+          eq(failedEmails.retried, false)
+        )
+      )
+      .limit(100); // Process in batches
+    
+    let successCount = 0;
+    
+    for (const email of failed) {
+      const emailData: EmailData = {
+        to: email.recipient,
+        subject: email.subject,
+        template: email.template,
+        templateData: JSON.parse(email.templateData),
+        priority: email.priority as any
+      };
+      
+      const success = await this.sendWithRetry(emailData);
+      
+      if (success) {
+        await db
+          .update(failedEmails)
+          .set({ retried: true, retriedAt: new Date() })
+          .where(eq(failedEmails.id, email.id));
+        
+        successCount++;
+      }
+    }
+    
+    console.log(`📧 Retried ${failed.length} failed emails, ${successCount} successful`);
+    return successCount;
+  }
+  
+  private static sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+typescript// shared/schema.ts - Add failed emails table
+export const failedEmails = pgTable("failed_emails", {
+  id: serial("id").primaryKey(),
+  recipient: varchar("recipient", { length: 500 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  template: varchar("template", { length: 100 }).notNull(),
+  templateData: text("template_data").notNull(), // JSON string
+  attemptCount: integer("attempt_count").notNull(),
+  lastError: text("last_error"),
+  priority: varchar("priority", { length: 20 }).default('normal'),
+  retried: boolean("retried").default(false),
+  retriedAt: timestamp("retried_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+Update Email Service Calls
+typescript// server/routes.ts - Update eSIM purchase to use retry service
+import { EmailRetryService } from './services/email-retry.service';
+
+// After successful eSIM purchase
+await EmailRetryService.sendWithRetry({
+  to: executive.email,
+  subject: 'Your eSIM is Ready to Activate',
+  template: 'esim-activation',
+  templateData: {
+    executiveName: executive.name,
+    planName: plan.name,
+    qrCode: purchasedEsim.qrCode,
+    activationCode: purchasedEsim.activationCode,
+    dataLimit: plan.dataLimit,
+    expirationDate: purchasedEsim.expirationDate
+  },
+  priority: 'critical' // Mark as critical
+});
+typescript// server/jobs/backup-db.job.ts - Update backup notifications
+await EmailRetryService.sendWithRetry({
+  to: process.env.ADMIN_EMAIL,
+  subject: 'Daily Backup Completed Successfully',
+  template: 'backup-success',
+  templateData: {
+    filename,
+    fileSize,
+    timestamp: new Date().toISOString()
+  },
+  priority: 'high'
+});
+Admin Endpoint for Manual Retry
+typescript// server/routes/admin.ts
+router.post('/retry-failed-emails', requireSuperAdmin, async (req, res) => {
+  try {
+    const { maxAgeHours = 24 } = req.body;
+    
+    const successCount = await EmailRetryService.retryFailedEmails(maxAgeHours);
+    
+    res.json({
+      success: true,
+      retriedCount: successCount,
+      message: `Successfully retried ${successCount} emails`
+    });
+  } catch (error) {
+    console.error('Failed to retry emails:', error);
+    res.status(500).json({ error: 'Retry operation failed' });
+  }
+});
+
+// Get failed emails for admin review
+router.get('/failed-emails', requireSuperAdmin, async (req, res) => {
+  const emails = await db
+    .select()
+    .from(failedEmails)
+    .where(eq(failedEmails.retried, false))
+    .orderBy(desc(failedEmails.createdAt))
+    .limit(50);
+  
+  res.json({ emails });
+});
+
+2.4 Foreign Key Cascade Rules
+Priority: 🟠 HIGH (Data integrity)
+Schema Updates
+typescript// shared/schema.ts - Define explicit cascade behavior
+export const purchasedEsims = pgTable("purchased_esims", {
+  id: serial("id").primaryKey(),
+  
+  // CASCADE: Delete eSIMs when executive is deleted
+  executiveId: integer("executive_id")
+    .references(() => executives.id, { 
+      onDelete: "cascade",
+      onUpdate: "cascade"
+    })
+    .notNull(),
+  
+  // RESTRICT: Prevent deletion of plans that are in use
+  planId: integer("plan_id")
+    .references(() => esimPlans.id, { 
+      onDelete: "restrict",
+      onUpdate: "cascade"
+    })
+    .notNull(),
+  
+  // ... rest of fields
+});
+
+export const executives = pgTable("executives", {
+  id: serial("id").primaryKey(),
+  
+  // SET NULL: Orphan executives if company is soft-deleted
+  // (But you'll also need deletedAt column for soft delete)
+  companyId: integer("company_id")
+    .references(() => companies.id, { 
+      onDelete: "set null",
+      onUpdate: "cascade"
+    }),
+  
+  // ... rest of fields
+});
+
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: serial("id").primaryKey(),
+  
+  // RESTRICT: Never delete wallet if transactions exist (audit trail)
+  walletId: integer("wallet_id")
+    .references(() => wallets.id, { 
+      onDelete: "restrict",
+      onUpdate: "cascade"
+    })
+    .notNull(),
+  
+  // ... rest of fields
+});
+
+export const wallets = pgTable("wallets", {
+  id: serial("id").primaryKey(),
+  
+  // RESTRICT: Never delete company if wallet exists
+  companyId: integer("company_id")
+    .references(() => companies.id, { 
+      onDelete: "restrict",
+      onUpdate: "cascade"
+    })
+    .notNull(),
+  
+  // ... rest of fields
+});
+Migration File
+sql-- migrations/005_foreign_key_cascades.sql
+
+-- Drop existing foreign key constraints
+ALTER TABLE purchased_esims 
+  DROP CONSTRAINT IF EXISTS purchased_esims_executive_id_executives_id_fk,
+  DROP CONSTRAINT IF EXISTS purchased_esims_plan_id_esim_plans_id_fk;
+
+ALTER TABLE executives
+  DROP CONSTRAINT IF EXISTS executives_company_id_companies_id_fk;
+
+ALTER TABLE wallet_transactions
+  DROP CONSTRAINT IF EXISTS wallet_transactions_wallet_id_wallets_id_fk;
+
+ALTER TABLE wallets
+  DROP CONSTRAINT IF EXISTS wallets_company_id_companies_id_fk;
+
+-- Add foreign key constraints with cascade rules
+
+-- purchased_esims cascades when executive deleted
+ALTER TABLE purchased_esims 
+  ADD CONSTRAINT purchased_esims_executive_id_executives_id_fk 
+    FOREIGN KEY (executive_id) 
+    REFERENCES executives(id) 
+    ON DELETE CASCADE 
+    ON UPDATE CASCADE;
+
+-- purchased_esims restricts plan deletion
+ALTER TABLE purchased_esims 
+  ADD CONSTRAINT purchased_esims_plan_id_esim_plans_id_fk 
+    FOREIGN KEY (plan_id) 
+    REFERENCES esim_plans(id) 
+    ON DELETE RESTRICT 
+    ON UPDATE CASCADE;
+
+-- executives can be orphaned (set null)
+ALTER TABLE executives
+  ADD CONSTRAINT executives_company_id_companies_id_fk 
+    FOREIGN KEY (company_id) 
+    REFERENCES companies(id) 
+    ON DELETE SET NULL 
+    ON UPDATE CASCADE;
+
+-- wallet_transactions restricts wallet deletion
+ALTER TABLE wallet_transactions
+  ADD CONSTRAINT wallet_transactions_wallet_id_wallets_id_fk 
+    FOREIGN KEY (wallet_id) 
+    REFERENCES wallets(id) 
+    ON DELETE RESTRICT 
+    ON UPDATE CASCADE;
+
+-- wallets restrict company deletion
+ALTER TABLE wallets
+  ADD CONSTRAINT wallets_company_id_companies_id_fk 
+    FOREIGN KEY (company_id) 
+    REFERENCES companies(id) 
+    ON DELETE RESTRICT 
+    ON UPDATE CASCADE;
+
+-- Verify constraints
+SELECT 
+  conname AS constraint_name,
+  conrelid::regclass AS table_name,
+  confrelid::regclass AS foreign_table,
+  confdeltype AS on_delete_action,
+  confupdtype AS on_update_action
+FROM pg_constraint
+WHERE contype = 'f'
+  AND connamespace = 'public'::regnamespace
+ORDER BY conrelid::regclass::text;
+
+-- on_delete_action codes:
+-- 'a' = NO ACTION
+-- 'r' = RESTRICT
+-- 'c' = CASCADE
+-- 'n' = SET NULL
+-- 'd' = SET DEFAULT
+Soft Delete Implementation
+Since you have status field on companies, implement soft delete:
+typescript// server/routes/companies.ts
+router.delete('/:id', requireSuperAdmin, async (req, res) => {
+  const companyId = parseInt(req.params.id);
+  
+  try {
+    // Check if company has active eSIMs
+    const activeEsims = await db
+      .select({ count: sql`count(*)` })
+      .from(purchasedEsims)
+      .innerJoin(executives, eq(purchasedEsims.executiveId, executives.id))
+      .where(
+        and(
+          eq(executives.companyId, companyId),
+          eq(purchasedEsims.status, 'active')
+        )
+      );
+    
+    if (parseInt(activeEsims[0].count) > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete company with active eSIMs',
+        activeEsims: parseInt(activeEsims[0].count)
+      });
+    }
+    
+    // Soft delete: set status to 'deleted'
+    await db
+      .update(companies)
+      .set({ 
+        status: 'deleted',
+        deletedAt: new Date() // Add this column
+      })
+      .where(eq(companies.id, companyId));
+    
+    res.json({ 
+      success: true, 
+      message: 'Company soft-deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Failed to delete company:', error);
+    res.status(500).json({ error: 'Deletion failed' });
+  }
+});
+
+🧪 Phase 2 Testing Suite
+typescript// test/phase2-security.test.ts
+import { describe, test, expect } from 'vitest';
+
+describe('Phase 2 Security Tests', () => {
+  describe('Webhook Security', () => {
+    test('rejects webhook with invalid signature', async () => {
+      const response = await fetch('/api/webhooks/esim-access', {
+        method: 'POST',
+        headers: {
+          'x-esim-signature': 'invalid',
+          'x-esim-timestamp': Date.now().toString()
+        },
+        body: JSON.stringify({ iccid: 'test' })
+      });
+      
+      expect(response.status).toBe(401);
+    });
+    
+    test('rejects webhook with old timestamp', async () => {
+      // 10 minutes old timestamp
+      const oldTimestamp = (Date.now() - 600000).toString();
+      
+      const response = await fetch('/api/webhooks/esim-access', {
+        method: 'POST',
+        headers: {
+          'x-esim-timestamp': oldTimestamp
+        },
+        body: JSON.stringify({ iccid: 'test' })
+      });
+      
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({
+        error: 'Webhook expired'
+      });
+    });
+    
+    test('prevents duplicate webhook processing', async () => {
+      const webhook = {
+        id: 'webhook_unique_123',
+        iccid: 'test',
+        dataUsage: 100
+      };
+      
+      // Send same webhook twice
+      const response1 = await sendValidWebhook(webhook);
+      const response2 = await sendValidWebhook(webhook);
+      
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
+      expect(await response2.json()).toMatchObject({
+        duplicate: true
+      });
+    });
+  });
+  
+  describe('Distributed Locking', () => {
+    test('prevents concurrent job execution', async () => {
+      const results = await Promise.all([
+        executeBackupJob(),
+        executeBackupJob()
+      ]);
+      
+      const successCount = results.filter(r => r.executed).length;
+      expect(successCount).toBe(1); // Only one should execute
+    });
+  });
+  
+  describe('Email Retry', () => {
+    test('retries failed email send', async () => {
+      let attemptCount = 0;
+      
+      // Mock SendGrid to fail twice, succeed third time
+      mockSendGrid(() => {
+        attemptCount++;
+        if (attemptCount < 3) throw new Error('Network error');
+        return { success: true };
+      });
+      
+      const result = await EmailRetryService.sendWithRetry({
+        to: 'test@example.com',
+        subject: 'Test',
+        template: 'test',
+        templateData: {}
+      });
+      
+      expect(result).toBe(true);
+      expect(attemptCount).toBe(3);
+    });
+    
+    test('logs failed email after max retries', async () => {
+      mockSendGrid(() => {
+        throw new Error('Permanent failure');
+      });
+      
+      await EmailRetryService.sendWithRetry({
+        to: 'test@example.com',
+        subject: 'Test',
+        template: 'test',
+        templateData: {},
+        priority: 'critical'
+      });
+      
+      const failed = await db
+        .select()
+        .from(failedEmails)
+        .where(eq(failedEmails.recipient, 'test@example.com'))
+        .limit(1);
+      
+      expect(failed.length).toBe(1);
+      expect(failed[0].attemptCount).toBe(3);
+    });
+  });
+  
+  describe('Foreign Key Cascades', () => {
+    test('deleting executive cascades to eSIMs', async () => {
+      // Create test executive with eSIM
+      const executive = await createTestExecutive();
+      await assignTestEsim(executive.id);
+      
+      // Delete executive
+      await db.delete(executives).where(eq(executives.id, executive.id));
+      
+      // Verify eSIMs were deleted
+      const orphanedEsims = await db
+        .select()
+        .from(purchasedEsims)
+        .where(eq(purchasedEsims.executiveId, executive.id));
+      
+      expect(orphanedEsims.length).toBe(0);
+    });
+    
+    test('cannot delete plan with active eSIMs', async () => {
+      const plan = await createTestPlan();
+      await assignEsimWithPlan(plan.id);
+      
+      await expect(
+        db.delete(esimPlans).where(eq(esimPlans.id, plan.id))
+      ).rejects.toThrow(); // Foreign key violation
+    });
+  });
+});
+
+📊 Phase 2 Completion Checklist
+Webhook Security
+
+ verifyEsimWebhookSignature middleware implemented
+ processed_webhooks table created
+ Timestamp validation (5-minute window)
+ Duplicate webhook prevention
+ Production webhook tested with real provider
+
+Distributed Locking
+
+ DistributedLock class implemented
+ Applied to daily backup job
+ Applied to hourly backup job
+ Applied to eSIM plan sync job
+ Multi-instance deployment tested
+
+Email Retry
+
+ EmailRetryService implemented
+ failed_emails table created
+ Applied to critical emails (eSIM activation)
+ Admin retry endpoint created
+ Email failure alerts configured
+
+Foreign Keys
+
+ Schema updated with cascade rules
+ Migration SQL executed
+ Soft delete implemented for companies
+ Executive deletion tested
+ Plan deletion restriction verified

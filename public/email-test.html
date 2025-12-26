@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Service Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    input {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 250px;
+      font-size: 16px;
+    }
+    #results {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      background-color: #fff;
+      min-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .test-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Email Service Test Tool</h1>
+  
+  <div class="card">
+    <h2>Test Email Configuration</h2>
+    <p>Verify that the SendGrid email service is properly configured.</p>
+    <button id="testConfig">Check Configuration</button>
+  </div>
+  
+  <div class="card">
+    <h2>Send Test Email</h2>
+    <p>Send a test email to verify email delivery.</p>
+    <div class="test-form">
+      <input type="email" id="emailInput" placeholder="Enter email address" value="hey@simtree.co">
+      <button id="sendTest">Send Test Email</button>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>Run All Tests</h2>
+    <p>Run both configuration check and email sending tests sequentially.</p>
+    <div class="test-form">
+      <input type="email" id="emailInputAll" placeholder="Enter email address" value="hey@simtree.co">
+      <button id="runAll">Run All Tests</button>
+    </div>
+  </div>
+  
+  <h2>Test Results</h2>
+  <div id="results">Results will appear here...</div>
+
+  <script src="/email-test.js"></script>
+  <script>
+    // Override console.log to also write to the results div
+    const originalLog = console.log;
+    const originalError = console.error;
+    const resultsDiv = document.getElementById('results');
+    
+    console.log = function() {
+      originalLog.apply(console, arguments);
+      const args = Array.from(arguments).map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+      );
+      resultsDiv.innerHTML += args.join(' ') + '\n';
+    };
+    
+    console.error = function() {
+      originalError.apply(console, arguments);
+      const args = Array.from(arguments).map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+      );
+      resultsDiv.innerHTML += '<span style="color: red;">' + args.join(' ') + '</span>\n';
+    };
+    
+    // Wire up buttons
+    document.getElementById('testConfig').addEventListener('click', () => {
+      resultsDiv.innerHTML = '';
+      checkEmailConfig();
+    });
+    
+    document.getElementById('sendTest').addEventListener('click', () => {
+      resultsDiv.innerHTML = '';
+      const email = document.getElementById('emailInput').value;
+      sendTestEmail(email);
+    });
+    
+    document.getElementById('runAll').addEventListener('click', () => {
+      resultsDiv.innerHTML = '';
+      const email = document.getElementById('emailInputAll').value;
+      runEmailTests(email);
+    });
+  </script>
+</body>
+</html>

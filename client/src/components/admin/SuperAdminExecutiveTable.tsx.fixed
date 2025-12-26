@@ -1,0 +1,492 @@
+import { useState, useMemo, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Check, Clock, Mail, Phone, User, X, Trash2, Send, Pencil, Building } from "lucide-react";
+import Loader2 from "@/components/Loader2";
+import PlanAssignmentDialog from "../company/PlanAssignmentDialog";
+import type { Executive as BaseExecutive, EsimPlan } from "@shared/schema";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { 
+  isEsimCancelledOrRefunded,
+  getMostRecentEsim,
+  getActiveEsims,
+  getTimeLeft
+} from "@/lib/utils/executiveUtils";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
+import EsimDetailsWrapper from "./EsimDetailsWrapper";
+
+// Extend the base Executive type to include companyName
+type Executive = BaseExecutive & { 
+  companyName?: string 
+};
+
+interface SuperAdminExecutiveTableProps {
+  executives?: Executive[];
+  purchasedEsimsData?: any[];
+}
+
+export default function SuperAdminExecutiveTable({ 
+  executives: propExecutives = [], 
+  purchasedEsimsData = []
+}: SuperAdminExecutiveTableProps) {
+  console.log("SuperAdminExecutiveTable received executives:", propExecutives);
+  console.log("SuperAdminExecutiveTable received eSIMs:", purchasedEsimsData);
+  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // State management
+  const [selectedExecutiveForPlan, setSelectedExecutiveForPlan] = useState<Executive | null>(null);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [selectedExecutiveDetails, setSelectedExecutiveDetails] = useState<Executive | null>(null);
+  const [esimDetails, setEsimDetails] = useState<any | null>(null);
+  const [filterValue, setFilterValue] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Filter executives and sort by ID (most recent first)
+  const sortedExecutives = useMemo(() => {
+    return [...(propExecutives || [])].sort((a, b) => b.id - a.id);
+  }, [propExecutives]);
+
+  // Get all purchased eSIMs data
+  const allPurchasedEsims = useMemo(() => {
+    return purchasedEsimsData || [];
+  }, [purchasedEsimsData]);
+
+  // Fetch plans data
+  const { data: plansData } = useQuery({
+    queryKey: ['/api/admin/esims/plans'],
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Get plans
+  const plans: EsimPlan[] = useMemo(() => {
+    return plansData?.data || [];
+  }, [plansData]);
+
+  // Filter executives based on search term
+  const filteredExecutives = useMemo(() => {
+    let result = sortedExecutives;
+
+    // Apply text search
+    if (filterValue) {
+      const lowercaseFilter = filterValue.toLowerCase();
+      result = result.filter(
+        (exec) =>
+          exec.name?.toLowerCase().includes(lowercaseFilter) ||
+          exec.email?.toLowerCase().includes(lowercaseFilter) ||
+          exec.companyName?.toLowerCase().includes(lowercaseFilter)
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "active") {
+        result = result.filter((exec) => {
+          const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+          return execEsims.some(esim => esim.status === "active");
+        });
+      } else if (statusFilter === "inactive") {
+        result = result.filter((exec) => {
+          const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+          return execEsims.length === 0;
+        });
+      } else if (statusFilter === "pending") {
+        result = result.filter((exec) => {
+          const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+          return execEsims.some(esim => esim.status === "waiting_for_activation");
+        });
+      }
+    }
+
+    return result;
+  }, [sortedExecutives, filterValue, statusFilter, allPurchasedEsims]);
+
+  // Fetch eSIM details for a specific executive
+  const fetchEsimDetails = async (executive: Executive) => {
+    try {
+      if (!executive.id) return;
+      
+      const executiveEsims = getActiveEsims(executive.id, allPurchasedEsims);
+      if (!executiveEsims || executiveEsims.length === 0) {
+        toast({
+          title: "No active eSIMs",
+          description: "This executive doesn't have any active eSIMs.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Set the selected executive and their eSIM details
+      setSelectedExecutiveDetails(executive);
+      setEsimDetails(executiveEsims[0]);
+      setShowDetailsDialog(true);
+    } catch (error) {
+      console.error("Error fetching eSIM details:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch eSIM details. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Send activation email to executive
+  const { mutate: sendActivationEmail, isPending: isSendingEmail } = useMutation({
+    mutationFn: async (executiveId: number) => {
+      const response = await apiRequest({
+        url: `/api/admin/executives/${executiveId}/send-activation-email`,
+        method: "POST",
+        data: {},
+      });
+      return response;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Email sent",
+        description: "Activation email has been sent successfully.",
+      });
+    },
+    onError: (error) => {
+      console.error("Error sending activation email:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send activation email. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Cancel plan for an executive
+  const { mutate: cancelPlan, isPending: isCancelling } = useMutation({
+    mutationFn: async (executiveId: number) => {
+      const execEsims = getActiveEsims(executiveId, allPurchasedEsims);
+      if (!execEsims.length) throw new Error("No active eSIMs found");
+      
+      const response = await apiRequest({
+        url: `/api/admin/esims/purchased-esims/${execEsims[0].id}/cancel`,
+        method: "POST",
+        data: {},
+      });
+      return response;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Plan cancelled",
+        description: "The eSIM plan has been cancelled successfully.",
+      });
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({queryKey: ['/api/admin/esims/purchased-esims']});
+      queryClient.invalidateQueries({queryKey: ['/api/admin/executives']});
+    },
+    onError: (error) => {
+      console.error("Error cancelling plan:", error);
+      toast({
+        title: "Error",
+        description: "Failed to cancel the plan. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle sending activation email
+  const handleSendActivationEmail = async (executive: Executive) => {
+    if (!executive.id) return;
+    sendActivationEmail(executive.id);
+  };
+
+  // Handle cancelling a plan
+  const handleCancelPlan = async (executive: Executive) => {
+    if (!executive.id) return;
+    
+    if (confirm(`Are you sure you want to cancel the plan for ${executive.name}?`)) {
+      cancelPlan(executive.id);
+    }
+  };
+
+  // Simple loading state
+  if (!propExecutives) {
+    return <div className="p-8 text-center">Loading executives data...</div>;
+  }
+
+  return (
+    <div className="w-full">
+      {/* Search and Filter */}
+      <div className="mb-6 flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search executives by name, email, or company..."
+            className="pl-8"
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+          />
+        </div>
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3 py-2"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All Executives</option>
+          <option value="active">Active Plans</option>
+          <option value="pending">Waiting for Activation</option>
+          <option value="inactive">No Active Plans</option>
+        </select>
+      </div>
+
+      {/* Executive stats */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg border p-4">
+          <div className="text-sm text-gray-500">Total Executives</div>
+          <div className="text-2xl font-bold">{propExecutives.length}</div>
+        </div>
+        <div className="bg-white rounded-lg border p-4">
+          <div className="text-sm text-gray-500">Active Plans</div>
+          <div className="text-2xl font-bold">
+            {propExecutives.filter(exec => {
+              const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+              return execEsims.some(esim => esim.status === "active");
+            }).length}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg border p-4">
+          <div className="text-sm text-gray-500">Pending Activation</div>
+          <div className="text-2xl font-bold">
+            {propExecutives.filter(exec => {
+              const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+              return execEsims.some(esim => esim.status === "waiting_for_activation");
+            }).length}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg border p-4">
+          <div className="text-sm text-gray-500">No Active Plans</div>
+          <div className="text-2xl font-bold">
+            {propExecutives.filter(exec => {
+              const execEsims = getActiveEsims(exec.id, allPurchasedEsims);
+              return execEsims.length === 0;
+            }).length}
+          </div>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Executive</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Left</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredExecutives.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-4 text-center text-gray-500">
+                    No records found
+                  </td>
+                </tr>
+              ) : (
+                filteredExecutives.map((executive) => {
+                  // Get active eSIMs for this executive
+                  const execActiveEsims = getActiveEsims(executive.id, allPurchasedEsims);
+                  
+                  // Get the most recent eSIM if available
+                  const activeEsim = execActiveEsims.length > 0 ? execActiveEsims[0] : null;
+                  
+                  // Get plan details if available
+                  const plan = activeEsim?.planId ? plans.find(p => p.id === Number(activeEsim.planId)) : null;
+                  
+                  // Determine status display
+                  let statusDisplay = "No active plan";
+                  let statusColor = "bg-gray-100 text-gray-800";
+                  if (activeEsim) {
+                    if (activeEsim.status === "active") {
+                      statusDisplay = "Active";
+                      statusColor = "bg-green-100 text-green-800";
+                    } else if (activeEsim.status === "waiting_for_activation") {
+                      statusDisplay = "Waiting for activation";
+                      statusColor = "bg-yellow-100 text-yellow-800";
+                    }
+                  }
+                  
+                  // Determine time left
+                  let timeLeft = "N/A";
+                  if (activeEsim && plan) {
+                    timeLeft = getTimeLeft(activeEsim, plan);
+                  }
+                  
+                  // Determine usage
+                  let usagePercent = activeEsim ? parseFloat(activeEsim.dataUsed || "0") : 0;
+                  
+                  return (
+                    <tr key={executive.id} className="hover:bg-gray-50">
+                      {/* Executive */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
+                            <User className="h-5 w-5" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{executive.name}</div>
+                            <div className="text-sm text-gray-500">CEO</div>
+                          </div>
+                        </div>
+                      </td>
+                      
+                      {/* Company */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{executive.companyName || "Unknown"}</div>
+                      </td>
+                      
+                      {/* Contact */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <div className="text-sm text-gray-500 mb-1 flex items-center">
+                            <Mail className="h-3 w-3 mr-1" /> {executive.email}
+                          </div>
+                          {executive.phoneNumber && (
+                            <div className="text-sm text-gray-500 flex items-center">
+                              <Phone className="h-3 w-3 mr-1" /> {executive.phoneNumber}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      
+                      {/* Status */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}`}>
+                          {statusDisplay}
+                        </span>
+                      </td>
+                      
+                      {/* Plan */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {plan ? plan.name : (activeEsim ? "Unknown Plan" : "No active plan")}
+                        </div>
+                        {plan && (
+                          <div className="text-xs text-gray-500">
+                            {plan.data}GB / {plan.validity} days
+                          </div>
+                        )}
+                      </td>
+                      
+                      {/* Time Left */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{timeLeft}</div>
+                      </td>
+                      
+                      {/* Usage */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                          <div 
+                            className="bg-blue-600 h-2.5 rounded-full" 
+                            style={{ width: `${Math.min(usagePercent * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{usagePercent}%</div>
+                      </td>
+                      
+                      {/* Details */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => fetchEsimDetails(executive)}
+                          disabled={!activeEsim && !executive.currentPlan}
+                        >
+                          View Details
+                        </Button>
+                      </td>
+                      
+                      {/* Actions */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex space-x-2">
+                          {activeEsim && activeEsim.status === "waiting_for_activation" && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleSendActivationEmail(executive)}
+                              className="text-white bg-blue-500 hover:bg-blue-600"
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                            </Button>
+                          )}
+                          
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setSelectedExecutiveForPlan(executive)}
+                            className="text-white bg-green-500 hover:bg-green-600"
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                          </Button>
+                          
+                          {activeEsim && !isEsimCancelledOrRefunded(activeEsim) && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleCancelPlan(executive)}
+                              className="text-white bg-red-500 hover:bg-red-600"
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Plan assignment dialog */}
+      {selectedExecutiveForPlan && (
+        <PlanAssignmentDialog
+          executive={selectedExecutiveForPlan}
+          open={!!selectedExecutiveForPlan}
+          onClose={() => setSelectedExecutiveForPlan(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({queryKey: ['/api/admin/executives']});
+            queryClient.invalidateQueries({queryKey: ['/api/admin/esims/purchased-esims']});
+            setSelectedExecutiveForPlan(null);
+          }}
+        />
+      )}
+
+      {/* eSIM details dialog */}
+      {showDetailsDialog && selectedExecutiveDetails && esimDetails && (
+        <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+          <DialogContent className="max-w-3xl">
+            <DialogTitle>eSIM Details for {selectedExecutiveDetails.name}</DialogTitle>
+            <EsimDetailsWrapper
+              esimDetails={esimDetails}
+              executiveName={selectedExecutiveDetails.name}
+              onClose={() => setShowDetailsDialog(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}

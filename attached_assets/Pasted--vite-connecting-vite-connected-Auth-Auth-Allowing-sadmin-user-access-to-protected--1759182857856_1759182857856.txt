@@ -1,0 +1,82 @@
+[vite] connecting...
+[vite] connected.
+Auth: ✗
+Auth: ✓
+Allowing sadmin user access to protected superadmin route
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 0, calculatedSpending: 0, totalSpending: 0}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 0, calculatedSpending: 0, totalSpending: 0}
+SSE: Connecting to /api/events
+SSE: Cleaning up connection
+Manually closing SSE connection
+SSE: Connecting to /api/events
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 0, calculatedSpending: 0, totalSpending: 0}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 0, calculatedSpending: 0, totalSpending: 0}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Final calculated customer revenue: $0.00 from 0 transactions
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+SSE: Connection opened
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}
+Spending values: 
+Object {realtimeSpending: null, serverSpendingValue: 57.45, calculatedSpending: 0, totalSpending: 57.45}

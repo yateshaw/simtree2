@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="300" height="80" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="300" height="80" fill="#ffffff" rx="8"/>
+  
+  <!-- Green accent -->
+  <rect x="10" y="10" width="4" height="60" fill="#10b981" rx="2"/>
+  
+  <!-- Main logo text -->
+  <text x="25" y="35" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#2d3748">Simtree</text>
+  
+  <!-- Tagline -->
+  <text x="25" y="55" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">Corporate Travel SIM</text>
+  
+  <!-- Tree icon -->
+  <g transform="translate(220, 20)">
+    <!-- Tree trunk -->
+    <rect x="18" y="30" width="4" height="15" fill="#10b981"/>
+    <!-- Tree leaves -->
+    <circle cx="20" cy="25" r="15" fill="#10b981" opacity="0.3"/>
+    <circle cx="20" cy="20" r="12" fill="#10b981" opacity="0.6"/>
+    <circle cx="20" cy="15" r="8" fill="#10b981"/>
+  </g>
+</svg>

@@ -1,0 +1,23 @@
+Compiling or instantiating a WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script: "script-src 'self'". The policy is report-only, so the violation has been logged but no further action has been taken.
+bootstrap:19 Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: "script-src 'self'".
+ The policy is report-only, so the violation has been logged but no further action has been taken.
+bootstrap:19 Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: "script-src 'self'".
+ The policy is report-only, so the violation has been logged but no further action has been taken.
+bootstrap:19 Compiling or instantiating a WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script: "script-src 'self'". The policy is report-only, so the violation has been logged but no further action has been taken.
+bootstrap:19 Compiling or instantiating a WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script: "script-src 'self'". The policy is report-only, so the violation has been logged but no further action has been taken.
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:652 [CurrencyManager] Setting currency from USD to: USD
+index-BpWqNcWf.js:652 [CurrencyManager] Currency unchanged, skipping update
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: {hasActivePlan: false, activeEsimsCount: 0}
+index-BpWqNcWf.js:665 Checking active plan status for undefined: {activeEsimsCount: 0, activeEsims: Array(0)}
+index-BpWqNcWf.js:665 Active plan check for undefined: 

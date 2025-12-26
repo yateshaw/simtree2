@@ -1,0 +1,983 @@
+Comprehensive Security & Deployment Testing Protocol - SimTree Platform
+Objective
+Execute a systematic security audit and deployment verification of the SimTree eSIM Management Platform, analyzing authentication flows, data protection, API security, log output safety, and production readiness across all system components.
+
+🔐 PHASE 1: Authentication & Session Security Testing
+1.1 Password Security Verification
+Test Scenarios:
+
+Super Admin Authentication Flow
+
+Attempt login with correct sadmin password
+Verify password is hashed with PBKDF2 (100,000 iterations)
+Confirm NO plain-text password comparison in code
+Check logs: ensure password never appears in log output
+Test timing attack resistance: multiple failed logins should take consistent time
+
+
+Regular User Authentication
+
+Test login with valid credentials
+Test login with invalid credentials
+Verify PBKDF2 verification is used (not plain-text comparison)
+Confirm crypto.timingSafeEqual() is used for hash comparison
+
+
+Session Management
+
+Login successfully → verify session cookie created
+Check cookie attributes: httpOnly: true, secure: true (production), sameSite: 'strict'
+Refresh page → verify session persists
+Logout → verify session destroyed
+Attempt to reuse old session cookie → should fail
+
+
+Session Fixation Prevention
+
+Capture session ID before login
+Login successfully
+Verify session ID changed after authentication (session regeneration)
+
+
+
+Security Checklist:
+
+ No passwords in logs (check startup, login attempts, errors)
+ Session secret is NOT the fallback default ('your-random-secret-key')
+ Production requires SESSION_SECRET environment variable
+ Session cookies are httpOnly and secure in production
+ Failed login attempts are rate-limited (50 per 15 minutes)
+ Timing-safe password comparison prevents timing attacks
+
+
+1.2 Log Output Security Audit
+Critical Check: Review ALL log output for sensitive data exposure
+Step 1: Trigger all logging scenarios and capture output
+bash# Start application with log capture
+NODE_ENV=production npm start 2>&1 | tee security-audit.log
+
+# Then trigger each scenario:
+# - Server startup
+# - Successful login
+# - Failed login
+# - Database connection
+# - Webhook receipt
+# - Email sending
+# - Backup job execution
+# - Transaction processing
+# - Error conditions
+Step 2: Search logs for sensitive data patterns
+bash# Search for potentially exposed secrets
+grep -i "password" security-audit.log
+grep -i "secret" security-audit.log
+grep -i "api[_-]key" security-audit.log
+grep -i "stripe" security-audit.log
+grep -i "sendgrid" security-audit.log
+grep -i "token" security-audit.log
+
+# Search for PII exposure
+grep -E "[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}" security-audit.log  # Credit cards
+grep -E "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" security-audit.log  # Emails
+grep -E "\+?[1-9][0-9]{7,14}" security-audit.log  # Phone numbers
+
+# Search for database credentials
+grep -i "postgres" security-audit.log
+grep -i "neon" security-audit.log
+grep -i "database_url" security-audit.log
+
+# Search for session data
+grep -i "session" security-audit.log
+grep -E "[0-9a-f]{32,}" security-audit.log  # Long hex strings (session IDs)
+```
+
+**Step 3: Analyze each finding**
+For each sensitive data match found:
+- [ ] Determine if exposure is necessary (e.g., "Connected to database: [hostname]" is OK)
+- [ ] Verify passwords/secrets are masked (e.g., "password: ****" not "password: abc123")
+- [ ] Check if PII can be removed or masked
+- [ ] Verify stack traces don't expose env vars or secrets
+
+**Expected Safe Patterns:**
+```
+✅ "Database connected: neon-db-host.neon.tech"  // Hostname OK
+✅ "User admin logged in"  // Username OK
+✅ "Email sent to: exe***@company.com"  // Masked email OK
+✅ "Stripe payment succeeded: pi_***"  // Masked ID OK
+
+❌ "Password: mypassword123"  // NEVER log passwords
+❌ "STRIPE_SECRET_KEY: sk_live_..."  // NEVER log API keys
+❌ "Session data: {userId: 1, password: '...'}"  // NEVER log session content
+❌ "Database URL: postgres://user:pass@host/db"  // NEVER log connection strings with credentials
+
+🔒 PHASE 2: API Security & Input Validation
+2.1 SQL Injection Testing
+Test all API endpoints with malicious inputs:
+
+Executive Management
+
+bash   # Test ID parameters
+   curl -X GET "http://localhost:5000/api/executives/1' OR '1'='1"
+   # Expected: 400 Bad Request or 404 (parameter validation)
+   
+   # Test search parameters
+   curl -X GET "http://localhost:5000/api/executives?search='; DROP TABLE executives;--"
+   # Expected: No SQL execution, sanitized input
+   
+   # Test filter parameters
+   curl -X GET "http://localhost:5000/api/executives?companyId=1 UNION SELECT * FROM users--"
+   # Expected: Parameter validation error
+
+Pagination Abuse
+
+bash   # Test excessive limit
+   curl -X GET "http://localhost:5000/api/executives?limit=999999"
+   # Expected: Capped to max value (e.g., 100)
+   
+   # Test negative offset
+   curl -X GET "http://localhost:5000/api/executives?offset=-1"
+   # Expected: Validation error or defaulted to 0
+
+JSON Injection
+
+bash   # Test nested SQL in JSON body
+   curl -X POST "http://localhost:5000/api/executives" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Test'; DROP TABLE executives;--", "email": "test@test.com"}'
+   # Expected: Input sanitized, no SQL execution
+Verification Checklist:
+
+ All database queries use parameterized queries (Drizzle ORM)
+ No raw SQL with string concatenation
+ ID parameters validated as positive integers
+ String inputs escaped/sanitized
+ Pagination limits enforced (max 100-500)
+
+
+2.2 XSS (Cross-Site Scripting) Testing
+Test HTML/JavaScript injection in user inputs:
+
+Executive Names
+
+bash   curl -X POST "http://localhost:5000/api/executives" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "<script>alert(\"XSS\")</script>", "email": "test@test.com"}'
+   # Expected: Script tags escaped in response and database
+
+Email Templates
+
+Create executive with name: <img src=x onerror=alert('XSS')>
+Trigger eSIM activation email
+Check email HTML: scripts should be escaped
+Verify Handlebars auto-escaping is enabled
+
+
+SSE Events
+
+Trigger event with malicious data
+Verify client receives escaped content
+Check browser console for script execution
+
+
+
+Verification Checklist:
+
+ All user input escaped in HTML responses
+ Email templates use Handlebars auto-escaping
+ SSE events sanitize data before broadcast
+ No dangerouslySetInnerHTML in React components
+
+
+2.3 CSRF Protection Testing
+Verify Cross-Site Request Forgery protection:
+
+Token Validation
+
+bash   # Get CSRF token
+   TOKEN=$(curl -c cookies.txt http://localhost:5000/api/csrf-token | jq -r '.token')
+   
+   # Test request WITH token (should succeed)
+   curl -b cookies.txt -X POST "http://localhost:5000/api/executives" \
+     -H "X-CSRF-Token: $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Test", "email": "test@test.com"}'
+   
+   # Test request WITHOUT token (should fail)
+   curl -b cookies.txt -X POST "http://localhost:5000/api/executives" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Test", "email": "test@test.com"}'
+   # Expected: 403 Forbidden
+
+Exempt Routes
+
+Verify webhooks are exempt (/api/webhooks/*)
+Verify health check is exempt (/health)
+Verify SSE endpoint is exempt (/events)
+All other routes should require CSRF token
+
+
+
+Verification Checklist:
+
+ CSRF middleware enabled for state-changing operations
+ Webhooks properly exempted (have signature verification instead)
+ Token validated on POST/PUT/PATCH/DELETE requests
+ GET requests don't require CSRF token
+
+
+🌐 PHASE 3: Webhook Security Testing
+3.1 eSIM Provider Webhook Security
+
+Signature Verification
+
+bash   # Test 1: Valid signature
+   TIMESTAMP=$(date +%s)000
+   PAYLOAD='{"id":"test123","iccid":"1234567890","dataUsage":500}'
+   SIGNATURE=$(echo -n "${TIMESTAMP}${PAYLOAD}" | openssl dgst -sha256 -hmac "$ESIM_ACCESS_SECRET" | cut -d' ' -f2)
+   
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" \
+     -H "Content-Type: application/json" \
+     -H "x-esim-signature: $SIGNATURE" \
+     -H "x-esim-timestamp: $TIMESTAMP" \
+     -d "$PAYLOAD"
+   # Expected: 200 OK
+   
+   # Test 2: Invalid signature
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" \
+     -H "x-esim-signature: invalid_signature" \
+     -H "x-esim-timestamp: $TIMESTAMP" \
+     -d "$PAYLOAD"
+   # Expected: 401 Unauthorized
+   
+   # Test 3: Missing signature
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" \
+     -H "Content-Type: application/json" \
+     -d "$PAYLOAD"
+   # Expected: 401 Unauthorized
+
+Replay Attack Prevention
+
+bash   # Test with old timestamp (> 5 minutes)
+   OLD_TIMESTAMP=$(($(date +%s)000 - 600000))
+   OLD_SIGNATURE=$(echo -n "${OLD_TIMESTAMP}${PAYLOAD}" | openssl dgst -sha256 -hmac "$ESIM_ACCESS_SECRET" | cut -d' ' -f2)
+   
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" \
+     -H "x-esim-signature: $OLD_SIGNATURE" \
+     -H "x-esim-timestamp: $OLD_TIMESTAMP" \
+     -d "$PAYLOAD"
+   # Expected: 401 Unauthorized - "Webhook expired"
+
+Duplicate Prevention
+
+bash   # Send same webhook ID twice
+   WEBHOOK_ID="unique_$(date +%s)"
+   PAYLOAD="{\"id\":\"$WEBHOOK_ID\",\"iccid\":\"1234567890\"}"
+   # (Generate valid signature and timestamp)
+   
+   # First request
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" ... 
+   # Expected: 200 OK, processed
+   
+   # Second request (immediate)
+   curl -X POST "http://localhost:5000/api/webhooks/esim-access" ...
+   # Expected: 200 OK, but {"duplicate": true}
+Verification Checklist:
+
+ HMAC signature verified using timing-safe comparison
+ Timestamp validation (5-minute window)
+ Webhook IDs stored in processed_webhooks table
+ Duplicate webhooks logged but not reprocessed
+ Logs don't expose ESIM_ACCESS_SECRET
+
+
+3.2 Stripe Webhook Security
+
+Production Signature Enforcement
+
+bash   # Verify signature is REQUIRED in production
+   NODE_ENV=production
+   
+   curl -X POST "http://localhost:5000/api/stripe/webhook" \
+     -H "Content-Type: application/json" \
+     -d '{"type":"payment_intent.succeeded"}'
+   # Expected: 400 Bad Request - "Webhook signature verification failed"
+
+Signature Validation
+
+bash   # Test with Stripe test webhook (use Stripe CLI)
+   stripe listen --forward-to localhost:5000/api/stripe/webhook
+   stripe trigger payment_intent.succeeded
+   # Expected: Webhook processed successfully
+Verification Checklist:
+
+ STRIPE_WEBHOOK_SECRET required in production
+ No signature bypass in production environment
+ Development warnings logged but signature enforced
+ Logs don't expose webhook secrets
+
+
+💳 PHASE 4: Transaction Security & Race Conditions
+4.1 Wallet Transaction Atomicity
+
+Concurrent Purchase Test
+
+bash   # Create test script: concurrent-purchase-test.sh
+   #!/bin/bash
+   
+   # Function to make purchase
+   purchase() {
+     curl -s -X POST "http://localhost:5000/api/executives/1/assign-esim" \
+       -H "Content-Type: application/json" \
+       -H "Cookie: session=YOUR_SESSION_COOKIE" \
+       -d '{"planId": 1}' &
+   }
+   
+   # Launch 5 simultaneous purchases
+   for i in {1..5}; do
+     purchase
+   done
+   
+   wait
+   echo "All purchases completed"
+Verification:
+
+Check wallet balance: Should reflect only successful purchases
+Verify no negative balance occurred
+Check wallet_transactions table: Debits should match credits
+Confirm SELECT FOR UPDATE locks prevented race conditions
+
+
+Transaction Rollback Test
+
+Temporarily disable eSIM provider API (simulate failure)
+Attempt purchase
+Verify wallet NOT debited
+Verify no partial records in purchased_esims table
+Check logs for rollback confirmation
+
+
+
+Verification Checklist:
+
+ All wallet operations wrapped in db.transaction()
+ SELECT FOR UPDATE used for pessimistic locking
+ Rollback occurs if any step fails
+ No orphaned transactions (debit without credit)
+ UAE VAT calculations included in transaction
+
+
+4.2 Payment Processing Security
+
+PCI Compliance Verification
+
+bash   # Search entire codebase for card number handling
+   grep -r "cardNumber" server/
+   grep -r "card_number" server/
+   grep -r "processCardPayment" server/
+   # Expected: No matches (function should be deleted)
+   
+   # Verify only Payment Intents are used
+   grep -r "paymentIntents.create" server/
+   # Expected: Found in stripe service
+   
+   grep -r "charges.create" server/
+   # Expected: No matches (direct charges violate PCI)
+
+Stripe Element Verification
+
+Open payment UI in browser
+Inspect network requests during payment
+Verify card data goes directly to Stripe (not your server)
+Check server logs: NO card numbers should appear
+
+
+
+Verification Checklist:
+
+ processCardPayment function deleted
+ No direct card data handling in backend
+ Only Payment Intents used
+ Stripe Elements handle all card input
+ No card numbers in logs
+
+
+🔐 PHASE 5: Production Environment Security
+5.1 Environment Variable Security
+
+Required Variables Check
+
+bash   # Run on production deployment
+   NODE_ENV=production node -e "
+   const required = [
+     'SESSION_SECRET',
+     'SADMIN_PASSWORD',
+     'STRIPE_SECRET_KEY',
+     'STRIPE_WEBHOOK_SECRET',
+     'SENDGRID_API_KEY',
+     'ESIM_ACCESS_SECRET',
+     'PROD_DATABASE_URL'
+   ];
+   
+   const missing = required.filter(v => !process.env[v]);
+   
+   if (missing.length > 0) {
+     console.error('Missing:', missing);
+     process.exit(1);
+   }
+   
+   console.log('All required variables set');
+   "
+
+Secret Rotation Readiness
+
+Test changing SESSION_SECRET (should invalidate old sessions)
+Test changing STRIPE_WEBHOOK_SECRET (should reject old webhooks)
+Verify no hardcoded secrets in code
+
+
+
+Verification Checklist:
+
+ No default/fallback secrets in production
+ Application exits if required vars missing
+ Secrets not logged anywhere
+ No .env file committed to git
+
+
+5.2 Database Connection Security
+
+Connection String Validation
+
+bash   # Check logs for exposed connection strings
+   NODE_ENV=production npm start 2>&1 | grep -i "postgres"
+   # Expected: Hostname shown, credentials masked
+   # ✅ "Connected to: neon-db.neon.tech"
+   # ❌ "postgres://user:password@host/db"
+
+SSL/TLS Verification
+
+bash   # Verify Neon connections use SSL
+   # Check Drizzle connection config
+   grep -A5 "dbCredentials" drizzle.config.ts
+   # Should include SSL settings for production
+
+Database Separation Test
+
+bash   # Development
+   NODE_ENV=development DEV_DATABASE_URL="postgres://..." npm start
+   # Check logs: "Using DEVELOPMENT database"
+   
+   # Production
+   NODE_ENV=production PROD_DATABASE_URL="postgres://..." npm start
+   # Check logs: "Using PRODUCTION database"
+   
+   # Verify DATABASE_URL is IGNORED
+   DATABASE_URL="postgres://wrong-db" NODE_ENV=production PROD_DATABASE_URL="postgres://correct-db" npm start
+   # Should connect to PROD_DATABASE_URL, not DATABASE_URL
+Verification Checklist:
+
+ DEV_DATABASE_URL used in development
+ PROD_DATABASE_URL used in production
+ DATABASE_URL completely ignored
+ No credentials in logs
+ SSL enabled for production connections
+
+
+📧 PHASE 6: Email Security & Reliability
+6.1 Email Injection Testing
+
+Header Injection
+
+bash   # Test email header injection
+   curl -X POST "http://localhost:5000/api/executives" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "Test",
+       "email": "test@test.com\nBcc: attacker@evil.com"
+     }'
+   # Expected: Email validation fails or injection sanitized
+
+Template Injection
+
+Create executive with name: {{process.env.STRIPE_SECRET_KEY}}
+Trigger activation email
+Verify template doesn't execute code
+Check email content: Should show literal string, not secret
+
+
+
+Verification Checklist:
+
+ Email addresses validated with regex
+ Handlebars auto-escaping enabled
+ No user input in email headers
+ Template variables sanitized
+
+
+6.2 Email Retry Mechanism
+
+Retry Logic Test
+
+bash   # Temporarily invalidate SendGrid API key
+   # Attempt to trigger email (e.g., eSIM activation)
+   # Check logs for retry attempts:
+   # "Email attempt 1/3 failed"
+   # "Retrying in 1000ms..."
+   # "Email attempt 2/3 failed"
+   # "Retrying in 5000ms..."
+   # "Email attempt 3/3 failed"
+   
+   # Check failed_emails table
+   SELECT * FROM failed_emails ORDER BY created_at DESC LIMIT 1;
+   # Expected: Record with attempt_count = 3
+
+Critical Email Alert
+
+Trigger critical email failure (priority: 'critical')
+Verify admin receives failure alert
+Check alert contains: recipient, subject, error message
+
+
+
+Verification Checklist:
+
+ Email retries 3 times with exponential backoff
+ Failed emails logged to database
+ Critical failures trigger admin alert
+ No infinite retry loops
+
+
+🔄 PHASE 7: Background Job Security
+7.1 Distributed Lock Testing
+
+Concurrent Job Prevention
+
+bash   # Start two instances simultaneously
+   # Terminal 1:
+   NODE_ENV=production npm start
+   
+   # Terminal 2 (immediately):
+   NODE_ENV=production npm start
+   
+   # Wait for backup job to trigger (03:00 AM or hourly)
+   # Check logs:
+   # Instance 1: "✓ Acquired lock: daily-backup-job"
+   # Instance 2: "Backup skipped - another instance is running"
+   
+   # Verify only ONE backup email received
+
+Lock Release Test
+
+Start backup job
+Verify lock acquired
+Kill process mid-backup (simulate crash)
+Start new instance
+Verify new instance can acquire lock (orphaned lock cleaned)
+
+
+
+Verification Checklist:
+
+ PostgreSQL advisory locks used
+ Only one instance executes job
+ Locks released after completion
+ No duplicate backup emails
+ Crash doesn't leave permanent lock
+
+
+7.2 Backup Security
+
+Backup File Permissions
+
+bash   # Check temporary backup files
+   ls -la /tmp/simtree-*
+   # Expected: 600 permissions (owner read/write only)
+
+Google Drive Access
+
+Verify service account JSON not in logs
+Check backup upload: Only authorized users can access
+Test Drive folder permissions
+Verify old backups deleted (14-day retention)
+
+
+Backup Content Security
+
+bash   # Download a backup from Google Drive
+   # Extract and inspect
+   gunzip simtree-backup-*.sql.gz
+   grep -i "password" simtree-backup-*.sql
+   # Expected: Hashed passwords only (no plain-text)
+Verification Checklist:
+
+ Backup files have restrictive permissions
+ Service account credentials not logged
+ Drive folder not publicly accessible
+ Backups contain hashed passwords only
+ Old backups auto-deleted
+
+
+📊 PHASE 8: Logging & Monitoring Security
+8.1 Production Log Audit
+Create comprehensive log analysis script:
+bash#!/bin/bash
+# security-log-audit.sh
+
+echo "=== SimTree Security Log Audit ==="
+echo ""
+
+# Capture 24 hours of production logs
+LOG_FILE="production-audit-$(date +%Y%m%d).log"
+
+echo "1. Capturing production logs..."
+# (Adjust based on your deployment platform)
+# Replit: replit logs tail --lines 10000 > $LOG_FILE
+# Or: tail -n 10000 /var/log/simtree.log > $LOG_FILE
+
+echo "2. Scanning for sensitive data exposure..."
+
+# Define patterns
+PATTERNS=(
+  "password=|password:|password\s*:"
+  "api[_-]?key=|apikey:"
+  "secret=|secret:|secret\s*:"
+  "token=|token:|Bearer\s+"
+  "[0-9]{4}[\s-]?[0-9]{4}[\s-]?[0-9]{4}[\s-]?[0-9]{4}"  # Credit cards
+  "postgres://[^@]+:[^@]+@"  # DB URLs with credentials
+  "sk_live_|pk_live_"  # Stripe keys
+  "SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}"  # SendGrid keys
+)
+
+FOUND=0
+
+for pattern in "${PATTERNS[@]}"; do
+  matches=$(grep -iE "$pattern" "$LOG_FILE" 2>/dev/null | wc -l)
+  if [ $matches -gt 0 ]; then
+    echo "⚠️  FOUND $matches matches for: $pattern"
+    grep -iE "$pattern" "$LOG_FILE" | head -3
+    echo ""
+    FOUND=$((FOUND + 1))
+  fi
+done
+
+if [ $FOUND -eq 0 ]; then
+  echo "✅ No sensitive data patterns found in logs"
+else
+  echo "❌ WARNING: $FOUND sensitive patterns detected - review immediately"
+fi
+
+echo ""
+echo "3. Checking for stack trace exposure..."
+stack_traces=$(grep -E "Error:.*at\s+.*\(" "$LOG_FILE" | wc -l)
+if [ $stack_traces -gt 0 ]; then
+  echo "⚠️  Found $stack_traces stack traces - verify no secrets exposed"
+  grep -E "Error:.*at\s+.*\(" "$LOG_FILE" | head -3
+else
+  echo "✅ No stack traces in production logs"
+fi
+
+echo ""
+echo "4. Checking for PII exposure..."
+email_count=$(grep -oE "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" "$LOG_FILE" | sort -u | wc -l)
+echo "   Unique emails in logs: $email_count"
+if [ $email_count -gt 10 ]; then
+  echo "   ⚠️  Consider masking email addresses"
+fi
+
+echo ""
+echo "5. Authentication event summary..."
+login_success=$(grep -i "login successful\|logged in" "$LOG_FILE" | wc -l)
+login_failed=$(grep -i "login failed\|invalid credentials" "$LOG_FILE" | wc -l)
+echo "   Successful logins: $login_success"
+echo "   Failed logins: $login_failed"
+
+if [ $login_failed -gt 100 ]; then
+  echo "   ⚠️  High failed login rate - possible brute force attack"
+fi
+
+echo ""
+echo "=== Audit Complete ==="
+echo "Log file saved: $LOG_FILE"
+Run the audit:
+bashchmod +x security-log-audit.sh
+./security-log-audit.sh
+
+8.2 Error Handling Security
+
+Production Error Responses
+
+bash   # Trigger an error in production
+   curl -X GET "http://localhost:5000/api/executives/999999"
+   # Expected response (NO stack trace):
+   {
+     "error": "Resource not found"
+   }
+   
+   # NOT:
+   {
+     "error": "Executive not found",
+     "stack": "Error: ... at /server/routes.ts:123",
+     "env": {"DATABASE_URL": "postgres://..."}
+   }
+
+Error Logging
+
+Trigger various errors (404, 500, validation)
+Check logs: Errors logged but no secrets exposed
+Verify user-facing errors are generic
+
+
+
+Verification Checklist:
+
+ Production errors don't expose stack traces
+ Error responses are generic (not detailed)
+ Internal errors logged with context
+ No environment variables in error output
+
+
+🌐 PHASE 9: Rate Limiting & DoS Protection
+9.1 Rate Limit Testing
+
+Global Rate Limit
+
+bash   # Test global limit (5000 req/15min)
+   for i in {1..100}; do
+     curl -s http://localhost:5000/health > /dev/null &
+   done
+   wait
+   
+   # Should succeed (under limit)
+   # Then test 5001st request:
+   curl -v http://localhost:5000/health
+   # Expected: 200 OK (limit not reached yet)
+
+Authentication Rate Limit
+
+bash   # Test login rate limit (50 attempts/15min per IP)
+   for i in {1..51}; do
+     curl -X POST http://localhost:5000/api/login \
+       -H "Content-Type: application/json" \
+       -d '{"username":"test","password":"wrong"}'
+   done
+   
+   # 51st request should return:
+   # 429 Too Many Requests
+
+Distributed Attack Simulation
+
+bash   # Test from multiple IPs (if possible)
+   # Each IP should have independent rate limit
+Verification Checklist:
+
+ Global rate limit enforced (5000/15min)
+ Auth rate limit enforced (50/15min)
+ Rate limits per IP address
+ 429 status code returned when limited
+ Logs show rate limit hits
+
+
+9.2 Pagination Abuse Prevention
+bash# Test excessive pagination
+curl "http://localhost:5000/api/executives?limit=999999"
+# Expected: Capped to reasonable max (e.g., 100)
+
+curl "http://localhost:5000/api/executives?limit=-1"
+# Expected: Validation error or default to safe value
+
+curl "http://localhost:5000/api/wallet/transactions?limit=1000000&offset=0"
+# Expected: Max limit enforced
+Verification Checklist:
+
+ Limit parameter capped (max 100-500)
+ Negative values rejected
+ Offset validated
+ No unbounded queries allowed
+
+
+🔍 PHASE 10: Deployment Verification
+10.1 Production Startup Checklist
+Monitor application startup in production:
+bash# Watch startup logs
+replit logs tail --follow
+
+# Expected startup sequence:
+# ✅ Environment variables validated
+# ✅ Using PRODUCTION database
+# ✅ Database connected: [database-name]
+# ✅ Session store initialized
+# ✅ Background jobs scheduled (deferred)
+# ✅ Server listening on port 5000
+# ✅ Vite production build loaded
+
+# NOT expected:
+# ❌ Using fallback session secret
+# ❌ Using DEVELOPMENT database
+# ❌ Webpack/Vite dev server starting
+# ❌ Warning: STRIPE_WEBHOOK_SECRET not set
+# ❌ Any password, secret, or API key values
+Startup Validation Tests:
+bash# Test 1: Missing required env var
+unset PROD_DATABASE_URL
+NODE_ENV=production npm start
+# Expected: Exit with error, log: "PROD_DATABASE_URL not set"
+
+# Test 2: Correct database used
+NODE_ENV=production PROD_DATABASE_URL="postgres://prod-db" npm start
+# Check logs: "Using PRODUCTION database"
+# Verify connects to prod-db, not dev-db
+
+# Test 3: Background jobs deferred
+# Check logs for timing:
+# "Daily backup scheduled (will run at 03:00 AM)"
+# "Hourly backup scheduled (will run every hour)"
+# NOT: Jobs executing immediately on startup
+
+10.2 Health Check Verification
+bash# Test health endpoint
+curl http://localhost:5000/health
+
+# Expected response:
+{
+  "status": "healthy",
+  "timestamp": "2025-01-XX...",
+  "uptime": 123.45,
+  "database": "connected"
+}
+
+# Test service status (superadmin)
+curl -H "Cookie: session=..." \
+  http://localhost:5000/api/maintenance/service-statuses
+
+# Expected response:
+{
+  "database": { "status": "connected", "latency": 15 },
+  "stripe": { "status": "connected" },
+  "sendgrid": { "status": "connected" },
+  "esimProvider": { "status": "connected" },
+  "googleDrive": { "status": "connected" }
+}
+
+10.3 Real-time Features Testing
+
+SSE Connection Security
+
+javascript   // Open browser console on production site
+   const eventSource = new EventSource('/events');
+   
+   eventSource.onmessage = (event) => {
+     const data = JSON.parse(event.data);
+     console.log('Received:', data);
+     
+     // Verify:
+     // - Only events for YOUR company are received
+     // - No events from other companies
+     // - No sensitive data in event payload
+   };
+   
+   // Check for company filtering
+   // If you're company ID 5, you should NEVER receive:
+   // {type: 'WALLET_UPDATE', companyId: 6, ...}
+
+SSE Memory Leak Test
+
+bash   # Open 100 SSE connections
+   for i in {1..100}; do
+     curl -N http://localhost:5000/events &
+   done
+   
+   # Monitor server memory
+   # Close connections after 5 minutes
+   # Verify memory returns to baseline (no leak)
+Verification Checklist:
+
+ SSE events filtered by company ID
+ Superadmin receives all events
+ No PII in SSE payloads
+ Connections properly cleaned up
+ No memory leaks with many connections
+
+
+📋 FINAL SECURITY SCORECARD
+Critical Issues (Must be 0)
+
+ Passwords in logs
+ API keys in logs
+ Database credentials in logs
+ Session data in logs
+ Credit card numbers anywhere
+ SQL injection vulnerabilities
+ XSS vulnerabilities
+ CSRF bypass possible
+ Webhook signature bypass
+ Race condition in transactions
+
+High Priority Issues (Should be 0)
+
+ Stack traces in production responses
+ Environment variables in errors
+ Unmasked emails in logs
+ Missing rate limits
+ Unbounded pagination
+ No distributed locking
+ Email injection possible
+ PCI compliance violations
+
+Medium Priority Issues (Target < 5)
+
+ Excessive logging (performance)
+ Generic error messages (UX)
+ Missing indexes (performance)
+ No monitoring alerts
+ Incomplete audit trail
+
+Production Readiness Score
+Calculate: (100 - (Critical * 10) - (High * 3) - (Medium * 1))
+
+90-100: ✅ Production ready
+70-89: ⚠️  Deploy with monitoring
+50-69: ❌ Fix high-priority issues first
+< 50: ❌ Not production ready
+
+
+📝 Final Report Template
+markdown# SimTree Security Audit Report
+Date: [DATE]
+Auditor: [NAME]
+Environment: Production / Staging
+Commit: [GIT COMMIT HASH]
+
+## Executive Summary
+- Overall Score: [XX/100]
+- Critical Issues: [X]
+- High Priority Issues: [X]
+- Recommendation: [DEPLOY / HOLD / FIX CRITICAL]
+
+## Detailed Findings
+
+### ✅ Passed Checks (Green)
+- [List all passed security checks]
+
+### ⚠️  Warnings (Yellow)
+- [List medium-priority issues]
+
+### ❌ Failed Checks (Red)
+- [List critical and high-priority issues]
+
+## Log Analysis Summary
+- Sensitive data exposures: [X]
+- Stack traces in production: [X]
+- PII leakage: [X]
+- Credentials in logs: [X]
+
+## Recommendations
+1. [Priority 1 fixes]
+2. [Priority 2 fixes]
+3. [Future improvements]
+
+## Deployment Decision
+[GO / NO-GO] with reasoning
+
+## Sign-off
+Security Review: [APPROVED / REJECTED]
+Technical Lead: [NAME]
+Date: [DATE]

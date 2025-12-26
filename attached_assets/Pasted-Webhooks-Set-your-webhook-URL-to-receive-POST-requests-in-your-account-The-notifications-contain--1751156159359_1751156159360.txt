@@ -1,0 +1,176 @@
+Webhooks
+Set your webhook URL to receive POST requests in your account.
+The notifications contain a notifyType field indicating the event category and a content object with specific details. Here are the types you can expect:
+
+ORDER_STATUS
+
+Trigger: Sent when an eSIM is created and ready for retrieval.
+
+Key content field: orderStatus will be "GOT_RESOURCE".
+
+Example Use: Used to know when your eSIM order is ready for download.
+
+SMDP_EVENT
+
+Trigger: Sent during real-time eSIM profile lifecycle events as they occur on the SM-DP+ server.
+
+Key content fields:
+
+eid: eUICC identifier of the device.
+
+iccid: ID of the eSIM.
+
+esimStatus: Current eSIM state (typically GOT_RESOURCE during provisioning, IN_USE when active).
+
+smdpStatus: SM-DP+ server status indicating the specific operation:
+
+DOWNLOAD: eSIM profile is being downloaded to the device.
+
+INSTALLATION: eSIM profile is being installed on the device.
+
+ENABLED: eSIM has been activated/enabled on the device.
+
+DISABLED: eSIM profile has been deactivated/disabled on the device..
+
+DELETED: eSIM profile has been removed from the device.
+
+Example Use: Track real-time eSIM provisioning progress and profile state changes for detailed lifecycle monitoring.
+
+ESIM_STATUS
+
+Trigger: Sent when the status of an individual eSIM changes after it has been allocated. This covers various lifecycle events.
+
+Key content fields:
+
+esimStatus: Indicates the current state. Common values observed include:
+
+IN_USE: The eSIM has been installed/activated on a device.
+
+USED_UP: The eSIM data allowance has been fully consumed.
+
+USED_EXPIRED: The eSIM data is used up, and expired.
+
+UNUSED_EXPIRED: The eSIM expired with data remaining.
+
+CANCEL: The eSIM has been canceled / refunded.
+
+REVOKED: The eSIM profile has been revoked.
+
+smdpStatus: SM-DP+ server status (e.g., ENABLED, DISABLED, RELEASED, DELETED, INSTALLATION).
+
+Example Use: Track activation, data exhaustion, expiration, or cancellations for specific eSIMs and notify customers.
+
+DATA_USAGE
+
+Trigger: Sent when the remaining data allowance on an active eSIM drops below predefined thresholds (e.g., 50%, 20%, 10% ).
+
+Key content fields:
+
+totalVolume: Total data allowance in bytes.
+
+orderUsage: Data used so far in bytes.
+
+remain: Remaining data in bytes.
+
+remainThreshold (optional): May indicate the threshold that triggered the notification (e.g., 0.5 for 50%).
+
+Example Use: Proactively notify end-users about low data balance.
+
+VALIDITY_USAGE
+
+Trigger: Sent when the remaining validity period of an active eSIM reaches 1 day.
+
+Key content fields:
+
+remain: The remaining validity duration (e.g., 1).
+
+durationUnit: The unit for the duration (e.g., "DAY").
+
+expiredTime: The exact timestamp when the eSIM will expire.
+
+totalDuration: The original validity duration.
+
+Example Use: Warn end-users that their plan is about to expire.
+
+Endpoint Setup
+Adding your webhook the first time will trigger a test webhook send. If you have a correctly working endpoint, you will receive an CHECK_HEALTH event. If our test send fails, your endpoint cannot be saved.
+
+{"notifyType":"CHECK_HEALTH","content":{"orderNo":"1234567890","orderStatus":"Test"}}
+
+IP Whitelist
+For additional security, you can whitelist the following sender IPs:
+
+3.1.131.226
+
+54.254.74.88
+
+18.136.190.97
+
+18.136.60.197
+
+18.136.19.137
+
+Note: The content object structure may vary slightly. Always inspect the received payload to understand all available fields for each notifyType.
+
+Look at our example webhook sending and test trigger form.
+
+json
+{
+    "notifyType": "ORDER_STATUS",
+    "content": {
+        "orderNo": "B23072016497499",
+        "orderStatus": "GOT_RESOURCE"
+    }
+}
+json
+{
+    "notifyType": "ESIM_STATUS",
+    "content": {
+        "orderNo": "B23072016497499",
+        "transactionId": "Your_txn_id",
+        "iccid": "894310817000000003",
+        "esimStatus": "IN_USE",
+        "smdpStatus": "INSTALLATION"
+    }
+}
+json
+{
+    "notifyType": "DATA_USAGE",
+    "content": {
+        "orderNo": "B23072016497499",
+        "transactionId": "Your_txn_id",
+        "iccid": "894310817000000003",
+        "totalVolume": 121313,
+        "orderUsage": 232,
+        "remain": 12123
+    }
+}
+View More
+json
+{
+    "notifyType": "VALIDITY_USAGE",
+    "content": {
+        "orderNo": "B23072016497499",
+        "transactionId": "Your_txn_id",
+        "iccid": "894310817000000003",
+        "durationUnit": "DAY",
+        "totalDuration": 30,
+        "expiredTime": "2024-01-11T08:10:19Z",
+        "remain": 1
+    }
+}
+json
+{
+  "notifyType": "ESIM_STATUS",
+  "content": {
+    "orderNo": "B24112011030010",
+    "esimTranNo": "24112011030010",
+    "transactionId": "56352736-1-1",
+    "iccid": "898500000048984",
+    "esimStatus": "CANCEL",
+    "smdpStatus": "RELEASED"
+  }
+}
+AUTHORIZATION
+API Key
+This folder is using API Key from collectioneSIM Access API

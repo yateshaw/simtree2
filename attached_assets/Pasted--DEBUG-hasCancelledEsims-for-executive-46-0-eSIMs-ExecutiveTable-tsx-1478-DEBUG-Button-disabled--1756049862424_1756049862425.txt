@@ -1,0 +1,275 @@
+[DEBUG] hasCancelledEsims for executive 46: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 46 (Thomas Rohit):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 45: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 45 (Catalina Smidt):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 48: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 48 (Diego Garcia):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 43: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 43 (Maria dominguez):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 47: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 47 (Mariano Rivero):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 39: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 39 (Shaw Juan Pablo):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 44: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 44 (Sofia  Bonavia ):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 46: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 46 (Thomas Rohit):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 45: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 45 (Catalina Smidt):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 48: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 48 (Diego Garcia):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 43: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 43 (Maria dominguez):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 47: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 47 (Mariano Rivero):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 39: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 39 (Shaw Juan Pablo):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 44: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 44 (Sofia  Bonavia ):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 46: 0 eSIMs
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 46 (Thomas Rohit):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+useEventSource.ts:85 SSE: Connection opened
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 45: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 37: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 45 (Catalina Smidt):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+6planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 48: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 40: status=waiting_for_activation, isCancelled=false, isWaiting=true
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: true, returning: false
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 48 (Diego Garcia):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 43: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 33: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 43 (Maria dominguez):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 47: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 39: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 47 (Mariano Rivero):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+6planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 39: 4 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 34: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:703 [DEBUG] eSIM 30: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:703 [DEBUG] eSIM 41: status=waiting_for_activation, isCancelled=false, isWaiting=true
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: true, returning: false
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 39 (Shaw Juan Pablo):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 44: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 36: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 44 (Sofia  Bonavia ):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 46: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 38: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 46 (Thomas Rohit):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 45: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 37: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 45 (Catalina Smidt):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 37 with status activated is EXPIRED (2025-08-12T21:56:20.000Z)
+6planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 48: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 40: status=waiting_for_activation, isCancelled=false, isWaiting=true
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: true, returning: false
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 48 (Diego Garcia):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:52 [PLAN_DEBUG] eSIM 40 with waiting_for_activation is considered ACTIVE
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 43: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 33: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 43 (Maria dominguez):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 33 with status activated is EXPIRED (2025-08-03T20:54:00.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 47: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 39: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 47 (Mariano Rivero):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+6planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 39: 4 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 34: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:703 [DEBUG] eSIM 30: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:703 [DEBUG] eSIM 41: status=waiting_for_activation, isCancelled=false, isWaiting=true
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: true, returning: false
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 39 (Shaw Juan Pablo):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: false
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:52 [PLAN_DEBUG] eSIM 41 with waiting_for_activation is considered ACTIVE
+6planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 44: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 36: status=activated, isCancelled=false, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 44 (Sofia  Bonavia ):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false
+ExecutiveTable.tsx:1485   BUTTON DISABLED: true
+2planCalculations.ts:62 [PLAN_DEBUG] eSIM 36 with status activated is EXPIRED (2025-08-09T00:25:20.000Z)
+ExecutiveTable.tsx:694 [DEBUG] hasCancelledEsims for executive 46: 1 eSIMs
+ExecutiveTable.tsx:703 [DEBUG] eSIM 38: status=cancelled, isCancelled=true, isWaiting=false
+ExecutiveTable.tsx:707 [DEBUG] hasNonCancelledWaitingEsims: false, returning: true
+ExecutiveTable.tsx:1478 [DEBUG] Button disabled check for executive 46 (Thomas Rohit):
+ExecutiveTable.tsx:1479   hasActivePlans: false
+ExecutiveTable.tsx:1480   isPending: false
+ExecutiveTable.tsx:1481   hasCancelledEsims: true
+ExecutiveTable.tsx:1482   isRecentlyCancelled: false

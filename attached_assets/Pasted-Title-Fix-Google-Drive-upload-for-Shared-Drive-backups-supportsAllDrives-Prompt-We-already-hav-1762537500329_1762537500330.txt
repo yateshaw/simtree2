@@ -1,0 +1,58 @@
+Title:
+Fix Google Drive upload for Shared Drive backups (supportsAllDrives)
+
+Prompt:
+
+We already have a working automated DB backup system that:
+
+- Creates a .sql.gz backup using pg_dump
+- Logs backups into the `backups` table
+- Sends email notifications
+- Reads `DRIVE_FOLDER_ID` from env
+- Uses a Google service account from `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+- Targets the folder ID: a folder inside a Shared Drive ("Simtree DB Backups" → "daily-db-backups")
+
+Backups are failing with:
+- "Service Accounts do not have storage quota"
+- "File not found: <folderId>"
+
+Root cause:
+Google Drive API requires `supportsAllDrives: true` (and proper shared drive support) when using a Shared Drive or its folders with a service account.
+
+⚠️ IMPORTANT RULE:
+Do NOT change or break any existing logic, jobs, routes, migrations, or configs. Only make the minimal, safe adjustments needed to make uploads work with the existing Shared Drive + folder ID configuration.
+
+### Tasks
+
+1. Locate the Drive upload implementation:
+   - The helper/service that calls `drive.files.create(...)` using `googleapis`.
+   - It should already be using `DRIVE_FOLDER_ID` as the parent folder.
+
+2. Update the Google Drive API calls to fully support Shared Drives:
+   - For `drive.files.create(...)`, add:
+     - `supportsAllDrives: true`
+   - If there is any `drive.files.list(...)` used for retention/cleanup, update it to:
+     - `supportsAllDrives: true`
+     - `includeItemsFromAllDrives: true`
+   - If needed, ensure the auth client is reused and nothing else in the logic is changed.
+
+3. Do NOT:
+   - Do not change env var names.
+   - Do not change the backup filename format.
+   - Do not change the cron schedule.
+   - Do not change the email behavior.
+   - Do not modify unrelated code.
+
+4. After the change, the behavior should be:
+
+   - Using the existing `DRIVE_FOLDER_ID` (which points to the "daily-db-backups" folder inside the Shared Drive).
+   - Service account (already added as Content Manager/Editor to the Shared Drive) can create files successfully.
+   - Manual run (`npm run backup:run` or POST /admin/backup/run-now) should:
+     - Create and upload `simtree-backup-*.sql.gz` into that folder
+     - Insert a SUCCESS row in `backups`
+     - Send a success email
+   - Retention logic (keeping the latest 14 backups) should work against that same folder using the updated list() call with Shared Drive flags.
+
+5. Keep the changes minimal and clearly scoped to the Drive integration.
+
+Please implement these adjustments now.

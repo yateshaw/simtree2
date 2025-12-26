@@ -1,0 +1,20 @@
+
+{
+  "variant": "vibrant",
+  "primary": "hsl(168 75% 38%)",
+  "appearance": "light",
+  "radius": 0.5,
+  "colors": {
+    "accent": "hsl(15 100% 65%)",
+    "mint": "hsl(145 55% 75%)",
+    "teal": "hsl(168 75% 38%)",
+    "coral": "hsl(15 100% 65%)",
+    "magenta": "hsl(335 100% 65%)",
+    "blue": "hsl(220 85% 55%)",
+    "yellow": "hsl(48 100% 55%)",
+    "pink": "hsl(335 100% 70%)",
+    "cyan": "hsl(190 90% 60%)",
+    "orange": "hsl(25 100% 55%)",
+    "gray": "hsl(0 0% 65%)"
+  }
+}

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bill {{billNumber}}</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #773df8 0%, #9c4df8 100%);
+      color: white;
+      padding: 30px 40px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 300;
+    }
+    .bill-number {
+      background-color: rgba(255,255,255,0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      margin-top: 15px;
+      display: inline-block;
+      font-weight: 500;
+    }
+    .content {
+      padding: 40px;
+    }
+    .bill-info {
+      background-color: #f8f9fa;
+      padding: 25px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e9ecef;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      font-weight: 600;
+      color: #495057;
+    }
+    .info-value {
+      color: #212529;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .items-table th {
+      background-color: #343a40;
+      color: white;
+      padding: 15px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .items-table td {
+      padding: 15px 12px;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 14px;
+    }
+    .items-table tr:last-child td {
+      border-bottom: none;
+    }
+    .items-table tr:nth-child(even) {
+      background-color: #f8f9fa;
+    }
+    .items-table .quantity {
+      text-align: center;
+      font-weight: 600;
+      color: #773df8;
+    }
+    .items-table .amount {
+      text-align: right;
+      font-weight: 600;
+    }
+    .total-section {
+      background: linear-gradient(135deg, #773df8 0%, #9c4df8 100%);
+      color: white;
+      padding: 25px;
+      border-radius: 8px;
+      text-align: center;
+      margin: 30px 0;
+    }
+    .total-amount {
+      font-size: 36px;
+      font-weight: 700;
+      margin: 0;
+    }
+    .total-label {
+      font-size: 16px;
+      opacity: 0.9;
+      margin: 5px 0 0 0;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 30px 40px;
+      text-align: center;
+      border-top: 1px solid #e9ecef;
+    }
+    .footer p {
+      margin: 5px 0;
+      color: #6c757d;
+      font-size: 14px;
+    }
+    .countries-tag {
+      background-color: #e3f2fd;
+      color: #1976d2;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>eSIM Services Bill</h1>
+      <div class="bill-number">{{billNumber}}</div>
+    </div>
+    
+    <div class="content">
+      <div class="bill-info">
+        <div class="info-row">
+          <span class="info-label">Company:</span>
+          <span class="info-value">{{companyName}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Bill Number:</span>
+          <span class="info-value">{{billNumber}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Billing Date:</span>
+          <span class="info-value">{{billingDate}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Currency:</span>
+          <span class="info-value">{{currency}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Total Items:</span>
+          <span class="info-value">{{itemCount}} plan types</span>
+        </div>
+      </div>
+
+      <h3 style="color: #495057; margin-bottom: 20px;">eSIM Plan Purchases</h3>
+      
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>Plan Details</th>
+            <th>Countries</th>
+            <th>Data/Validity</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each items}}
+          <tr>
+            <td>
+              <strong>{{planName}}</strong>
+              {{#if planDescription}}
+              <br><small style="color: #6c757d;">{{planDescription}}</small>
+              {{/if}}
+            </td>
+            <td>
+              {{#if countries}}
+              <span class="countries-tag">{{countries}}</span>
+              {{else}}
+              <span style="color: #6c757d;">Global</span>
+              {{/if}}
+            </td>
+            <td>
+              <strong>{{dataAmount}}</strong><br>
+              <small style="color: #6c757d;">{{validity}}</small>
+            </td>
+            <td class="quantity">{{quantity}}</td>
+            <td class="amount">${{unitPrice}}</td>
+            <td class="amount"><strong>${{totalAmount}}</strong></td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+
+      <div class="total-section">
+        <div class="total-amount">${{totalAmount}}</div>
+        <div class="total-label">TOTAL AMOUNT</div>
+      </div>
+
+      <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
+        This bill represents eSIM services purchased on {{billingDate}}. 
+        All charges have been automatically deducted from your account balance.
+        For questions about this bill, please contact our support team.
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p><strong>Simtree eSIM Platform</strong></p>
+      <p>Questions? Contact us at hey@simtree.co</p>
+      <p>&copy; {{year}} Simtree. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

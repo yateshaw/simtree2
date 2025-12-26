@@ -1,0 +1,99 @@
+Prompt for Replit Agent: Database Environment Separation
+Objective
+Modify the SimTree application to use environment-specific database URLs, completely ignoring Replit's auto-managed DATABASE_URL.
+Requirements
+1. Database URL Selection Logic
+Update server/db.ts to:
+
+Use DEV_DATABASE_URL when NODE_ENV !== 'production'
+Use PROD_DATABASE_URL when NODE_ENV === 'production'
+Never use DATABASE_URL (Replit-managed)
+Fail startup with clear error if the required URL is missing
+Log which database is being used (dev/prod) with masked credentials
+
+2. Environment Variable Validation
+Add startup validation in server/index.ts:
+
+Check that DEV_DATABASE_URL exists in development
+Check that PROD_DATABASE_URL exists in production
+Exit with error code 1 if missing
+Log clear instructions: "Set DEV_DATABASE_URL in Replit Secrets"
+
+3. Update All Database-Dependent Code
+Ensure these files/functions use the correct database URL:
+
+server/jobs/backup-db.job.ts - Daily backup pg_dump command
+server/jobs/backup-hourly.job.ts - Hourly backup pg_dump command
+server/jobs/backup-schema.job.ts - Schema backup (if exists)
+Any other code that directly accesses database URLs
+
+4. Connection Testing
+Add a testDatabaseConnection() function that:
+
+Executes SELECT current_database(), NOW()
+Logs the connected database name
+Returns true/false for connection success
+Call this on application startup before registering routes
+
+Implementation Notes
+Current structure:
+typescript// server/db.ts
+const databaseUrl = process.env.DATABASE_URL; // ❌ Remove this
+Required structure:
+typescript// server/db.ts
+function getDatabaseUrl(): string {
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  
+  if (nodeEnv === 'production') {
+    const url = process.env.PROD_DATABASE_URL;
+    if (!url) throw new Error('PROD_DATABASE_URL required');
+    console.log('🚀 Using PRODUCTION database');
+    return url;
+  } else {
+    const url = process.env.DEV_DATABASE_URL;
+    if (!url) throw new Error('DEV_DATABASE_URL required');
+    console.log('🔧 Using DEVELOPMENT database');
+    return url;
+  }
+}
+
+const databaseUrl = getDatabaseUrl();
+```
+
+## Expected Behavior
+
+**In Development (Replit workspace):**
+```
+🔧 Using DEVELOPMENT database
+📊 Connected to: dev-database-name
+```
+
+**In Production (deployed):**
+```
+🚀 Using PRODUCTION database
+📊 Connected to: prod-database-name
+```
+
+**If wrong URL set:**
+```
+❌ FATAL: PROD_DATABASE_URL not set in production environment
+   Set PROD_DATABASE_URL in Replit Secrets
+[Process exits with code 1]
+Files to Modify
+
+server/db.ts - Database connection logic
+server/index.ts - Startup validation
+server/jobs/backup-db.job.ts - Use correct DB URL in pg_dump
+server/jobs/backup-hourly.job.ts - Use correct DB URL in pg_dump
+Any other files that reference DATABASE_URL directly
+
+Testing Instructions
+After implementation, verify:
+
+Set NODE_ENV=development and DEV_DATABASE_URL → App connects to dev DB
+Set NODE_ENV=production and PROD_DATABASE_URL → App connects to prod DB
+Unset PROD_DATABASE_URL in production → App exits with error
+Run backup jobs → They use the correct database URL
+
+
+Replit Agent: Please implement this database environment separation, ensuring the app NEVER uses Replit's auto-managed DATABASE_URL.

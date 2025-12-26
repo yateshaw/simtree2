@@ -1,0 +1,95 @@
+Title:
+Add hourly incremental and schema backups (without off-site)
+
+Prompt:
+
+We already have a fully working daily full backup system that:
+- Runs at 03:00 AM Buenos Aires time
+- Uploads compressed .sql.gz files to Google Drive folder (daily-db-backups)
+- Logs backups into the `backups` table
+- Sends email notifications
+- Keeps 14 backups
+- Uses supportsAllDrives: true for Shared Drive
+
+Now we need to add:
+1. Hourly incremental backups (for critical tables)
+2. Schema-only backups (manual trigger)
+No off-site destination.
+
+⚠️ CRITICAL RULES:
+- Do NOT modify or break the existing daily backup job.
+- Integrate new jobs safely as independent modules.
+- Use existing email and logging patterns.
+
+---
+
+### 1️⃣ Hourly Incremental Backups
+**Goal:**
+Create lightweight hourly backups of critical tables (`wallets`, `transactions`, `purchased_esims`).
+
+**Requirements:**
+- New file: `server/jobs/backup-hourly.job.ts`
+- Run `pg_dump` only for the listed tables:
+
+
+pg_dump --table=wallets --table=transactions --table=purchased_esims $DATABASE_URL
+
+- Compress output with gzip.
+- Upload to Google Drive folder from `process.env.HOURLY_DRIVE_FOLDER_ID`.
+- Retain only the latest 48 hours of hourly backups (delete older).
+- Add entry to the same `backups` table with `status`, `filename`, and a new `type='hourly'`.
+- Send email notification to `yateshaw@gmail.com` (success/error).
+- Filename format: `simtree-hourly-backup-YYYYMMDD-HHmm.sql.gz`
+- Add cron schedule `'0 * * * *'` (every hour) in `server/index.ts`.
+- Cron runs only if `NODE_ENV === 'production'`.
+
+---
+
+### 2️⃣ Schema Backups (manual)
+**Goal:**
+Capture DB structure whenever migrations are run.
+
+**Requirements:**
+- New script: `scripts/backup-schema.ts`
+- Run:
+
+
+pg_dump --schema-only $DATABASE_URL
+
+- Compress as `.sql.gz`
+- Upload to Google Drive folder from `process.env.SCHEMA_DRIVE_FOLDER_ID`
+- Keep all schema backups permanently (no deletion).
+- Filename: `schema-backup-YYYYMMDD-HHmm.sql.gz`
+- Log entry in `backups` table with `type='schema'`.
+- Add npm script:
+
+
+"backup:schema": "ts-node scripts/backup-schema.ts"
+
+- Allow manual execution before or after migrations.
+
+---
+
+### 3️⃣ Update Migrations / Database
+If the `backups` table doesn’t yet have a `type` column, add it:
+
+
+ALTER TABLE backups ADD COLUMN type TEXT DEFAULT 'daily';
+
+
+---
+
+### 4️⃣ Cron Schedule Summary
+- Daily full backup: `0 3 * * *`
+- Hourly incremental: `0 * * * *`
+- Schema backup: manual via `npm run backup:schema`
+
+---
+
+### 5️⃣ Expected Results
+After implementation:
+- Hourly backups appear in `hourly-diffs/`
+- Schema backups appear in `schema-backups/`
+- Backups table logs all types (`daily`, `hourly`, `schema`)
+- Emails continue working
+- No interference with existing daily job
