@@ -218,11 +218,12 @@ async function startServer() {
 
     // Apply CSRF protection to most routes, but exempt webhooks and health checks
     app.use((req, res, next) => {
-      // Skip CSRF for webhooks (they come from external services)
+      // Skip CSRF for webhooks and scheduled tasks (they come from external services)
       if (req.path.startsWith('/api/webhooks') || 
           req.path.startsWith('/webhook') ||
           req.path.startsWith('/api/esim-webhook') ||
           req.path.startsWith('/api/stripe/webhook') ||
+          req.path.startsWith('/api/scheduled/') ||
           req.path === '/health' ||
           req.path === '/events' ||
           req.path.startsWith('/usage/') ||
