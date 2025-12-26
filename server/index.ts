@@ -31,8 +31,7 @@ import { startInactivityChecker } from "./jobs/inactivity-checker";
 import { dailyBillingJob } from "./jobs/daily-billing";
 import { billingScheduler } from "./services/billing-scheduler.service";
 import { startDbUsageMonitor } from "./monitor/dbUsageMonitor";
-import { backupDbJob } from "./jobs/backup-db.job";
-import { backupHourlyJob } from "./jobs/backup-hourly.job";
+// Backup jobs removed - now handled by GitHub Actions (runs independently of app)
 import { esimAccessService } from "./services/esim-access";
 import cron from "node-cron";
 import csrf from "csurf";
@@ -450,52 +449,8 @@ async function startServer() {
             }, 60000); // 60 second delay
           }
           
-          // Automated Database Backup (production only, 03:00 AM Buenos Aires time)
-          if (!useMemoryStorage && process.env.NODE_ENV === 'production') {
-            setTimeout(() => {
-              log("Initializing automated database backup scheduler...");
-              
-              // Schedule daily backup at 03:00 AM Buenos Aires time (America/Argentina/Buenos_Aires)
-              // Using cron expression: '0 3 * * *' with timezone support
-              cron.schedule('0 3 * * *', async () => {
-                log("Starting scheduled database backup (03:00 AM Buenos Aires)...");
-                try {
-                  const result = await backupDbJob.run();
-                  if (result.success) {
-                    log(`✅ Scheduled backup completed: ${result.filename}`);
-                  } else {
-                    log(`❌ Scheduled backup failed: ${result.error}`);
-                  }
-                } catch (error) {
-                  console.error("Error during scheduled backup:", error);
-                }
-              }, {
-                timezone: 'America/Argentina/Buenos_Aires'
-              });
-              
-              log("Automated database backup scheduled for 03:00 AM Buenos Aires time");
-              
-              // Schedule incremental backup every 4 hours (critical tables only)
-              // Using cron expression: '0 */4 * * *' (every 4 hours at minute 0)
-              cron.schedule('0 */4 * * *', async () => {
-                log("Starting scheduled incremental backup...");
-                try {
-                  const result = await backupHourlyJob.run();
-                  if (result.success) {
-                    log(`✅ Incremental backup completed: ${result.filename}`);
-                  } else {
-                    log(`❌ Incremental backup failed: ${result.error}`);
-                  }
-                } catch (error) {
-                  console.error("Error during incremental backup:", error);
-                }
-              }, {
-                timezone: 'America/Argentina/Buenos_Aires'
-              });
-              
-              log("Automated incremental backup scheduled (every 4 hours)");
-            }, 90000); // 90 second delay
-          }
+          // Database backups now handled by GitHub Actions (runs independently of app)
+          // See: .github/workflows/database-backup.yml
           
           log("Background jobs scheduled");
         }, 30000); // Start jobs 30 seconds after server starts
