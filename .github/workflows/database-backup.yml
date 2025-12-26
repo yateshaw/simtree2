@@ -186,8 +186,16 @@ jobs:
               console.log(`Deleting ${toDelete.length} old backups...`);
               
               for (const file of toDelete) {
-                await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
-                console.log(`Deleted: ${file.name}`);
+                try {
+                  await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                  console.log(`Deleted: ${file.name}`);
+                } catch (err) {
+                  if (err.code === 404 || err.message?.includes('File not found')) {
+                    console.log(`Already deleted: ${file.name}`);
+                  } else {
+                    throw err;
+                  }
+                }
               }
             }
           }
