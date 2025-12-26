@@ -165,6 +165,54 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         .set(updateData)
         .where(eq(schema.purchasedEsims.id, esim.id));
 
+      // Update the employee's plan information when an eSIM is activated
+      if (esim.employeeId && esim.planId) {
+        console.log(`[eSIM Access Webhook] Updating plan information for employee ${esim.employeeId} due to eSIM activation`);
+        
+        try {
+          // Get the plan details
+          const [plan] = await db
+            .select()
+            .from(schema.esimPlans)
+            .where(eq(schema.esimPlans.id, esim.planId));
+          
+          if (plan) {
+            // Use provider's activation timestamp if available, otherwise fall back to current time
+            let activationDate: Date;
+            if (content?.activateTime && content.activateTime !== 'null') {
+              activationDate = new Date(content.activateTime);
+              console.log(`[eSIM Access Webhook] Using provider activation time: ${content.activateTime}`);
+            } else if (content?.installationTime && content.installationTime !== 'null') {
+              activationDate = new Date(content.installationTime);
+              console.log(`[eSIM Access Webhook] Using provider installation time: ${content.installationTime}`);
+            } else {
+              activationDate = new Date();
+              console.log(`[eSIM Access Webhook] Using current time as activation date`);
+            }
+            
+            const endDate = new Date(activationDate);
+            endDate.setDate(endDate.getDate() + (plan.validity || 30));
+            
+            await db
+              .update(schema.employees)
+              .set({
+                dataUsage: "0",
+                dataLimit: String(plan.data),
+                planStartDate: activationDate.toISOString(),
+                planEndDate: endDate.toISOString(),
+                planValidity: plan.validity,
+              })
+              .where(eq(schema.employees.id, esim.employeeId));
+            
+            console.log(`[eSIM Access Webhook] Successfully updated employee ${esim.employeeId} with plan: ${plan.name}, validity: ${plan.validity} days, data limit: ${plan.data} GB`);
+          } else {
+            console.warn(`[eSIM Access Webhook] Plan not found for planId: ${esim.planId}`);
+          }
+        } catch (employeeUpdateError) {
+          console.error(`[eSIM Access Webhook] Error updating employee plan info:`, employeeUpdateError);
+        }
+      }
+
       // Check for plan depletion after activation with usage data
       if (dataUsageFromWebhook !== null) {
         try {
