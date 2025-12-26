@@ -144,11 +144,29 @@ jobs:
             });
           }
 
+          async function validateFolder(folderId) {
+            const auth = getAuth();
+            const drive = google.drive({ version: 'v3', auth });
+            
+            try {
+              const response = await drive.files.get({
+                fileId: folderId,
+                fields: 'id, name, mimeType',
+                supportsAllDrives: true
+              });
+              console.log(`Folder validated: ${response.data.name} (${folderId})`);
+              return true;
+            } catch (err) {
+              const errMsg = err.message || String(err);
+              throw new Error(`Invalid folder ID '${folderId}': ${errMsg}. Check GOOGLE_DRIVE_FOLDER_ID_* secrets in GitHub.`);
+            }
+          }
+
           async function uploadToGoogleDrive(filePath, fileName, folderId) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
             
-            console.log(`Uploading ${fileName} to Google Drive...`);
+            console.log(`Uploading ${fileName} to Google Drive folder ${folderId}...`);
             
             const fileMetadata = {
               name: fileName,
@@ -160,48 +178,64 @@ jobs:
               body: createReadStream(filePath)
             };
             
-            const response = await drive.files.create({
-              requestBody: fileMetadata,
-              media: media,
-              fields: 'id, name, size',
-              supportsAllDrives: true
-            });
-            
-            console.log(`Uploaded: ${response.data.id} (${response.data.size} bytes)`);
-            return response.data;
+            try {
+              const response = await drive.files.create({
+                requestBody: fileMetadata,
+                media: media,
+                fields: 'id, name, size',
+                supportsAllDrives: true
+              });
+              
+              console.log(`Uploaded: ${response.data.id} (${response.data.size} bytes)`);
+              return response.data;
+            } catch (err) {
+              const errMsg = err.message || String(err);
+              if (errMsg.includes('not found') || errMsg.includes('File not found')) {
+                throw new Error(`Upload failed: Folder '${folderId}' not found or not accessible. Check GitHub secrets and folder permissions.`);
+              }
+              throw err;
+            }
           }
 
           async function manageRetention(folderId, maxFiles) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
             
-            const listResponse = await drive.files.list({
-              q: `'${folderId}' in parents and trashed=false`,
-              fields: 'files(id, name, createdTime)',
-              orderBy: 'createdTime desc',
-              supportsAllDrives: true,
-              includeItemsFromAllDrives: true
-            });
-            
-            const files = listResponse.data.files || [];
-            console.log(`Found ${files.length} backups in folder (max: ${maxFiles})`);
-            
-            if (files.length > maxFiles) {
-              const toDelete = files.slice(maxFiles);
-              console.log(`Deleting ${toDelete.length} old backups...`);
+            try {
+              const listResponse = await drive.files.list({
+                q: `'${folderId}' in parents and trashed=false`,
+                fields: 'files(id, name, createdTime)',
+                orderBy: 'createdTime desc',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
+              });
               
-              for (const file of toDelete) {
-                try {
-                  await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
-                  console.log(`Deleted: ${file.name}`);
-                } catch (err) {
-                  if (err.code === 404 || err.message?.includes('File not found')) {
-                    console.log(`Already deleted: ${file.name}`);
-                  } else {
-                    throw err;
+              const files = listResponse.data.files || [];
+              console.log(`Found ${files.length} backups in folder (max: ${maxFiles})`);
+              
+              if (files.length > maxFiles) {
+                const toDelete = files.slice(maxFiles);
+                console.log(`Deleting ${toDelete.length} old backups...`);
+                
+                for (const file of toDelete) {
+                  try {
+                    await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                    console.log(`Deleted: ${file.name}`);
+                  } catch (err) {
+                    const errCode = err.code || err.status || err.response?.status;
+                    const errMsg = err.message || String(err);
+                    if (errCode == 404 || errCode === '404' || 
+                        errMsg.includes('not found') || errMsg.includes('File not found') ||
+                        errMsg.includes(file.id)) {
+                      console.log(`Already deleted or not found: ${file.name}`);
+                    } else {
+                      console.warn(`Failed to delete ${file.name}: ${errMsg}`);
+                    }
                   }
                 }
               }
+            } catch (listErr) {
+              console.warn(`Retention cleanup skipped: ${listErr.message}`);
             }
           }
 
@@ -365,8 +399,11 @@ jobs:
             }
             
             if (!folderId) {
-              throw new Error(`Folder ID not configured for ${BACKUP_TYPE} backup`);
+              throw new Error(`Folder ID not configured for ${BACKUP_TYPE} backup. Set GOOGLE_DRIVE_FOLDER_ID_${BACKUP_TYPE.toUpperCase()} in GitHub secrets.`);
             }
+            
+            // Validate folder exists and is accessible
+            await validateFolder(folderId);
             
             const now = new Date();
             const timestamp = now.toISOString()
