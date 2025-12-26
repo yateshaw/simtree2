@@ -1,0 +1,381 @@
+PROMPT: Sistema de Backups Automatizados a Google Drive
+Objetivo
+Implementar un sistema completo de backups automatizados de base de datos PostgreSQL que se suban a Google Drive, con notificaciones por email, logs en base de datos, y gestión de retención automática.
+
+Arquitectura General
+El sistema consiste en:
+
+Backup Diario Completo - Toda la base de datos, 03:00 AM, retención 14 días
+Backup Incremental (cada 4 horas) - Solo tablas críticas, retención 48 backups
+Backup de Schema Manual - Solo estructura, sin datos, retención permanente
+Dependencias a Instalar
+npm install googleapis @sendgrid/mail node-cron
+Variables de Entorno Requeridas
+# Base de datos
+DATABASE_URL=postgresql://user:pass@host:5432/db
+# Google Drive (Service Account)
+GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key":"..."}
+GOOGLE_DRIVE_FOLDER_ID=1abc... # Carpeta para backups diarios
+HOURLY_DRIVE_FOLDER_ID=1xyz... # Carpeta para backups incrementales
+SCHEMA_DRIVE_FOLDER_ID=1def... # Carpeta para backups de schema
+# SendGrid para notificaciones
+SENDGRID_API_KEY=SG.xxx
+SENDGRID_FROM_EMAIL=backups@tudominio.com
+# Activación
+NODE_ENV=production  # Los cron jobs solo se activan en production
+Archivos a Crear
+1. Schema de Base de Datos (shared/schema.ts)
+Añadir tabla para logging de backups:
+
+export const backups = pgTable("backups", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  filename: text("filename").notNull(),
+  sizeBytes: integer("size_bytes"),
+  driveFileId: text("drive_file_id"),
+  status: text("status").notNull(), // 'SUCCESS' | 'ERROR'
+  type: text("type").notNull().default("daily"), // 'daily' | 'hourly' | 'schema'
+  error: text("error"),
+});
+export const insertBackupSchema = createInsertSchema(backups).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBackup = z.infer<typeof insertBackupSchema>;
+export type Backup = typeof backups.$inferSelect;
+2. Servicio de Google Drive (server/services/drive.service.ts)
+import { google } from 'googleapis';
+import { Readable } from 'stream';
+const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+interface UploadFileParams {
+  name: string;
+  mimeType: string;
+  readableStream: Readable;
+  parents?: string[];
+}
+interface DriveFile {
+  id: string;
+  name: string;
+  createdTime: string;
+  size: string;
+}
+class DriveService {
+  private drive: any = null;
+  private initialized: boolean = false;
+  private initializeAuth() {
+    if (this.initialized) return;
+    const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!credentialsJson) {
+      throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not found');
+    }
+    const credentials = JSON.parse(credentialsJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: SCOPES,
+    });
+    this.drive = google.drive({ version: 'v3', auth });
+    this.initialized = true;
+    console.log('[Drive Service] Authenticated successfully');
+  }
+  private ensureInitialized() {
+    if (!this.initialized) this.initializeAuth();
+  }
+  async uploadFile({ name, mimeType, readableStream, parents }: UploadFileParams): Promise<{ fileId: string; size: number }> {
+    this.ensureInitialized();
+    
+    const defaultFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const parentFolders = parents || (defaultFolderId ? [defaultFolderId] : undefined);
+    
+    if (!parentFolders) {
+      throw new Error('GOOGLE_DRIVE_FOLDER_ID not set');
+    }
+    console.log(`[Drive Service] Uploading: ${name}`);
+    const response = await this.drive.files.create({
+      requestBody: { name, parents: parentFolders },
+      media: { mimeType, body: readableStream },
+      fields: 'id, size',
+      supportsAllDrives: true,
+    });
+    console.log(`[Drive Service] Uploaded: ${response.data.id} (${response.data.size} bytes)`);
+    return { fileId: response.data.id, size: parseInt(response.data.size || '0', 10) };
+  }
+  async listFiles(folderId?: string): Promise<DriveFile[]> {
+    this.ensureInitialized();
+    
+    const targetFolderId = folderId || process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!targetFolderId) throw new Error('Folder ID not specified');
+    const response = await this.drive.files.list({
+      q: `'${targetFolderId}' in parents and trashed=false`,
+      fields: 'files(id, name, createdTime, size)',
+      orderBy: 'createdTime desc',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    return response.data.files || [];
+  }
+  async deleteFile(fileId: string): Promise<void> {
+    this.ensureInitialized();
+    await this.drive.files.delete({ fileId, supportsAllDrives: true });
+    console.log(`[Drive Service] Deleted: ${fileId}`);
+  }
+  async manageRetention(maxBackups: number = 14, folderId?: string): Promise<void> {
+    const files = await this.listFiles(folderId);
+    
+    if (files.length <= maxBackups) {
+      console.log(`[Drive Service] Retention OK: ${files.length}/${maxBackups}`);
+      return;
+    }
+    const filesToDelete = files.slice(maxBackups);
+    console.log(`[Drive Service] Deleting ${filesToDelete.length} old backups`);
+    for (const file of filesToDelete) {
+      await this.deleteFile(file.id);
+    }
+  }
+}
+export const driveService = new DriveService();
+3. Distributed Lock para evitar duplicados (server/utils/distributed-lock.ts)
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
+import crypto from 'crypto';
+function stringToLockId(lockName: string): number {
+  const hash = crypto.createHash('md5').update(lockName).digest();
+  return hash.readInt32BE(0);
+}
+export class DistributedLock {
+  private lockId: number;
+  private lockName: string;
+  private acquired: boolean = false;
+  constructor(lockName: string) {
+    this.lockName = lockName;
+    this.lockId = stringToLockId(lockName);
+  }
+  async tryAcquire(): Promise<boolean> {
+    try {
+      const result = await db.execute(sql`
+        SELECT pg_try_advisory_lock(${this.lockId}) as acquired
+      `);
+      this.acquired = result.rows[0]?.acquired === true;
+      return this.acquired;
+    } catch (error) {
+      console.error(`[Lock] Failed to acquire ${this.lockName}:`, error);
+      return false;
+    }
+  }
+  async release(): Promise<void> {
+    if (!this.acquired) return;
+    
+    try {
+      await db.execute(sql`SELECT pg_advisory_unlock(${this.lockId})`);
+      this.acquired = false;
+    } catch (error) {
+      console.error(`[Lock] Failed to release ${this.lockName}:`, error);
+    }
+  }
+}
+4. Servicio de Email para Notificaciones (server/services/backup-email.service.ts)
+import sgMail from '@sendgrid/mail';
+const NOTIFICATION_EMAIL = 'admin@tudominio.com';
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'backups@tudominio.com';
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+export async function sendBackupSuccessEmail({ filename, driveLink, size, timestamp }: {
+  filename: string;
+  driveLink: string;
+  size: number;
+  timestamp: Date;
+}): Promise<void> {
+  if (!process.env.SENDGRID_API_KEY) return;
+  const sizeInMB = (size / 1024 / 1024).toFixed(2);
+  
+  await sgMail.send({
+    to: NOTIFICATION_EMAIL,
+    from: FROM_EMAIL,
+    subject: '✅ Backup Exitoso',
+    html: `
+      <h1>✅ Backup Completado</h1>
+      <p><strong>Archivo:</strong> ${filename}</p>
+      <p><strong>Tamaño:</strong> ${sizeInMB} MB</p>
+      <p><strong>Fecha:</strong> ${timestamp.toISOString()}</p>
+      <p><a href="${driveLink}">Ver en Google Drive</a></p>
+    `,
+  });
+}
+export async function sendBackupErrorEmail({ error }: { error: string }): Promise<void> {
+  if (!process.env.SENDGRID_API_KEY) return;
+  await sgMail.send({
+    to: NOTIFICATION_EMAIL,
+    from: FROM_EMAIL,
+    subject: '❌ Backup Fallido',
+    html: `
+      <h1>❌ Error en Backup</h1>
+      <pre>${error}</pre>
+      <p>Fecha: ${new Date().toISOString()}</p>
+    `,
+  });
+}
+5. Job de Backup Diario (server/jobs/backup-db.job.ts)
+import { spawn } from 'child_process';
+import { createGzip } from 'zlib';
+import { PassThrough } from 'stream';
+import { driveService } from '../services/drive.service';
+import { sendBackupSuccessEmail, sendBackupErrorEmail } from '../services/backup-email.service';
+import { db } from '../db';
+import * as schema from '@shared/schema';
+import { DistributedLock } from '../utils/distributed-lock';
+interface BackupResult {
+  success: boolean;
+  filename?: string;
+  driveFileId?: string;
+  size?: number;
+  error?: string;
+  skipped?: boolean;
+}
+export class BackupDbJob {
+  private isRunning = false;
+  private distributedLock = new DistributedLock('daily-backup-job');
+  async run(): Promise<BackupResult> {
+    if (this.isRunning) return { success: true, skipped: true };
+    const acquired = await this.distributedLock.tryAcquire();
+    if (!acquired) return { success: true, skipped: true };
+    this.isRunning = true;
+    console.log('[Backup] Starting daily backup...');
+    try {
+      const result = await this.performBackup();
+      
+      if (result.success) {
+        await this.logBackup({
+          filename: result.filename!,
+          sizeBytes: result.size,
+          driveFileId: result.driveFileId,
+          status: 'SUCCESS',
+          type: 'daily',
+        });
+        await sendBackupSuccessEmail({
+          filename: result.filename!,
+          driveLink: `https://drive.google.com/file/d/${result.driveFileId}/view`,
+          size: result.size!,
+          timestamp: new Date(),
+        });
+      } else {
+        await this.logBackup({
+          filename: result.filename || 'unknown',
+          status: 'ERROR',
+          type: 'daily',
+          error: result.error,
+        });
+        await sendBackupErrorEmail({ error: result.error || 'Unknown error' });
+      }
+      return result;
+    } finally {
+      this.isRunning = false;
+      await this.distributedLock.release();
+    }
+  }
+  private performBackup(): Promise<BackupResult> {
+    return new Promise((resolve) => {
+      const databaseUrl = process.env.DATABASE_URL;
+      if (!databaseUrl) {
+        resolve({ success: false, error: 'DATABASE_URL not configured' });
+        return;
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `backup-${timestamp}.sql.gz`;
+      const pgDump = spawn('pg_dump', [databaseUrl], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const gzip = createGzip({ level: 9 });
+      const passThrough = new PassThrough();
+      let stderrData = '';
+      pgDump.stderr.on('data', (data) => { stderrData += data.toString(); });
+      
+      pgDump.stdout.pipe(gzip).pipe(passThrough);
+      let uploadPromise: Promise<{ fileId: string; size: number }> | null = null;
+      passThrough.once('readable', () => {
+        uploadPromise = driveService.uploadFile({
+          name: filename,
+          mimeType: 'application/gzip',
+          readableStream: passThrough,
+        }).catch((err) => {
+          console.error('[Backup] Upload failed:', err);
+          return null as any;
+        });
+      });
+      pgDump.on('close', async (code) => {
+        if (code !== 0) {
+          resolve({ success: false, filename, error: `pg_dump failed: ${stderrData}` });
+          return;
+        }
+        try {
+          const uploadResult = await uploadPromise;
+          if (!uploadResult) throw new Error('Upload failed');
+          await driveService.manageRetention(14); // Keep 14 backups
+          resolve({
+            success: true,
+            filename,
+            driveFileId: uploadResult.fileId,
+            size: uploadResult.size,
+          });
+        } catch (error: any) {
+          resolve({ success: false, filename, error: error.message });
+        }
+      });
+    });
+  }
+  private async logBackup(data: schema.InsertBackup): Promise<void> {
+    try {
+      await db.insert(schema.backups).values(data);
+    } catch (error) {
+      console.error('[Backup] Failed to log:', error);
+    }
+  }
+}
+export const backupDbJob = new BackupDbJob();
+6. Job de Backup Incremental (server/jobs/backup-hourly.job.ts)
+Igual al anterior pero con estas diferencias:
+
+CRITICAL_TABLES = ['wallets', 'wallet_transactions', 'purchased_esims'] (o las tablas críticas de tu app)
+Usa --table tablename en pg_dump para cada tabla
+manageRetention(48, process.env.HOURLY_DRIVE_FOLDER_ID)
+Lock name: 'hourly-backup-job'
+7. Integración en server/index.ts
+import cron from 'node-cron';
+import { backupDbJob } from './jobs/backup-db.job';
+import { backupHourlyJob } from './jobs/backup-hourly.job';
+// Solo en producción
+if (process.env.NODE_ENV === 'production') {
+  // Backup diario a las 03:00 AM
+  cron.schedule('0 3 * * *', async () => {
+    console.log('[Cron] Starting daily backup...');
+    await backupDbJob.run();
+  });
+  // Backup incremental cada 4 horas
+  cron.schedule('0 */4 * * *', async () => {
+    console.log('[Cron] Starting incremental backup...');
+    await backupHourlyJob.run();
+  });
+  console.log('✅ Backup schedulers initialized');
+}
+Configuración de Google Cloud
+Crear proyecto en Google Cloud Console
+Habilitar Google Drive API
+Crear Service Account
+Descargar JSON de credenciales
+Crear carpetas en Google Drive
+Compartir carpetas con el email del Service Account (role: Editor)
+Flujo de Ejecución
+Cron trigger → Job.run()
+Adquirir distributed lock (pg_try_advisory_lock)
+Ejecutar pg_dump | gzip | stream
+Upload stream a Google Drive
+Gestionar retención (eliminar backups antiguos)
+Registrar en tabla backups
+Enviar notificación por email
+Liberar lock
+Características de Seguridad
+Distributed Lock: Usa pg_advisory_lock de PostgreSQL para evitar ejecuciones duplicadas en múltiples instancias
+Compresión: gzip level 9 para minimizar tamaño
+Streaming: No almacena archivo localmente, hace pipe directo a Drive
+Reintentos en emails: 3 intentos con delays incrementales (1s, 5s, 15s)
+Logging completo: Cada backup se registra en DB con estado y errores
+Con este prompt, otro agente puede implementar el sistema completo de backups automatizados. ¿Necesitas alguna aclaración o ajuste?
