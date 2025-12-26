@@ -1,0 +1,69 @@
+26s
+Run node backup.mjs
+Attempt 1/3...
+Starting hourly backup...
+Running pg_dump for hourly backup...
+Backup created: simtree-hourly-backup-20251226-031158.sql.gz (0.00 MB)
+Uploading simtree-hourly-backup-20251226-031158.sql.gz to Google Drive...
+Uploaded: 1s30Ob_FKH5XJTS7Dy9dkYXRGMcb6Mvox (20 bytes)
+Found 100 backups in folder (max: 48)
+Deleting 52 old backups...
+Already deleted: simtree-hourly-backup-20251225-091705.sql.gz
+Already deleted: simtree-hourly-backup-20251225-091659.sql.gz
+Already deleted: simtree-hourly-backup-20251225-091655.sql.gz
+Already deleted: simtree-hourly-backup-20251225-081954.sql.gz
+Already deleted: simtree-hourly-backup-20251225-081949.sql.gz
+Already deleted: simtree-hourly-backup-20251225-081944.sql.gz
+Already deleted: simtree-hourly-backup-20251225-071718.sql.gz
+Already deleted: simtree-hourly-backup-20251225-071712.sql.gz
+Already deleted: simtree-hourly-backup-20251225-071708.sql.gz
+Already deleted: simtree-hourly-backup-20251225-062232.sql.gz
+Already deleted: simtree-hourly-backup-20251225-062227.sql.gz
+Already deleted: simtree-hourly-backup-20251225-062222.sql.gz
+Already deleted: simtree-hourly-backup-20251225-051853.sql.gz
+Already deleted: simtree-hourly-backup-20251225-051849.sql.gz
+Already deleted: simtree-hourly-backup-20251225-051841.sql.gz
+Already deleted: simtree-hourly-backup-20251225-043239.sql.gz
+Already deleted: simtree-hourly-backup-20251225-043234.sql.gz
+Already deleted: simtree-hourly-backup-20251225-043230.sql.gz
+Already deleted: simtree-hourly-backup-20251225-032145.sql.gz
+Already deleted: simtree-hourly-backup-20251225-032140.sql.gz
+Already deleted: simtree-hourly-backup-20251225-032135.sql.gz
+Already deleted: simtree-hourly-backup-20251225-010330.sql.gz
+Already deleted: simtree-hourly-backup-20251225-010325.sql.gz
+Already deleted: simtree-hourly-backup-20251225-010320.sql.gz
+Already deleted: simtree-hourly-backup-20251224-231357.sql.gz
+Already deleted: simtree-hourly-backup-20251224-231352.sql.gz
+Already deleted: simtree-hourly-backup-20251224-231347.sql.gz
+Already deleted: simtree-hourly-backup-20251224-221409.sql.gz
+Already deleted: simtree-hourly-backup-20251224-221404.sql.gz
+Already deleted: simtree-hourly-backup-20251224-221400.sql.gz
+Already deleted: simtree-hourly-backup-20251224-211242.sql.gz
+Already deleted: simtree-hourly-backup-20251224-211237.sql.gz
+Already deleted: simtree-hourly-backup-20251224-211232.sql.gz
+Already deleted: simtree-hourly-backup-20251224-201521.sql.gz
+Already deleted: simtree-hourly-backup-20251224-201516.sql.gz
+Already deleted: simtree-hourly-backup-20251224-201512.sql.gz
+Already deleted: simtree-hourly-backup-20251224-191125.sql.gz
+Already deleted: simtree-hourly-backup-20251224-191119.sql.gz
+Already deleted: simtree-hourly-backup-20251224-191114.sql.gz
+Already deleted: simtree-hourly-backup-20251224-182037.sql.gz
+Already deleted: simtree-hourly-backup-20251224-182033.sql.gz
+Already deleted: simtree-hourly-backup-20251224-182028.sql.gz
+Already deleted: simtree-hourly-backup-20251224-171232.sql.gz
+Already deleted: simtree-hourly-backup-20251224-171227.sql.gz
+Already deleted: simtree-hourly-backup-20251224-171222.sql.gz
+Already deleted: simtree-hourly-backup-20251224-161735.sql.gz
+Already deleted: simtree-hourly-backup-20251224-161730.sql.gz
+Already deleted: simtree-hourly-backup-20251224-161725.sql.gz
+Already deleted: simtree-hourly-backup-20251224-151508.sql.gz
+Already deleted: simtree-hourly-backup-20251224-151502.sql.gz
+Already deleted: simtree-hourly-backup-20251224-151457.sql.gz
+Already deleted: simtree-hourly-backup-20251224-141422.sql.gz
+✅ Backup completed successfully
+Backup result: ***
+  "success": true,
+  "fileName": "simtree-hourly-backup-20251226-031158.sql.gz",
+  "size": 20,
+  "driveFileId": "1s30Ob_FKH5XJTS7Dy9dkYXRGMcb6Mvox"
+***
