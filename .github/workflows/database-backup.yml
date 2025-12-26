@@ -45,7 +45,9 @@ jobs:
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-          pg_dump --version
+          # Add PostgreSQL 17 to PATH (priority over default version)
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail google-auth-library
