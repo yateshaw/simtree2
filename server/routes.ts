@@ -54,6 +54,7 @@ import usageRoutes from './routes/usage.routes';
 import { registerBillingRoutes } from './routes/billing';
 import { companyCurrencyService } from './services/company-currency.service';
 import adminBackupRoutes from './routes/admin-backup.routes';
+import githubBackupRoutes from './routes/webhooks/github-backup';
 
 // Unified security headers configuration using Helmet middleware
 // This centralizes all security headers to prevent conflicts and ensure consistency
@@ -180,6 +181,9 @@ export function registerRoutes(app: Express): Server {
   
   // Register admin backup routes
   app.use(adminBackupRoutes); // Admin backup routes for database backup management
+  
+  // Register GitHub Actions backup webhook (external trigger for backups)
+  app.use('/api', githubBackupRoutes);
   
   // Register webhooks
   app.use('/api', webhooksRouter); // Webhook endpoints for third-party services

@@ -1,0 +1,108 @@
+name: Database Backup to Google Drive
+
+on:
+  schedule:
+    # Daily full backup at 06:00 UTC (03:00 AM Buenos Aires)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      backup_type:
+        description: 'Type of backup to run'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - hourly
+
+env:
+  APP_URL: ${{ secrets.APP_URL }}
+
+jobs:
+  daily-backup:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.backup_type == 'daily')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Daily Backup
+        run: |
+          echo "Triggering daily database backup..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.APP_URL }}/api/webhooks/github-backup" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Backup-Secret: ${{ secrets.BACKUP_WEBHOOK_SECRET }}" \
+            -d '{"type": "daily", "triggered_by": "github_actions"}')
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response: $body"
+          echo "HTTP Code: $http_code"
+          
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Backup triggered successfully"
+          else
+            echo "❌ Backup trigger failed"
+            exit 1
+          fi
+
+      - name: Wait for Backup Completion
+        run: |
+          echo "Waiting for backup to complete..."
+          sleep 120
+          
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            "${{ secrets.APP_URL }}/api/webhooks/github-backup/status" \
+            -H "X-GitHub-Backup-Secret: ${{ secrets.BACKUP_WEBHOOK_SECRET }}")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Backup Status: $body"
+          
+          if echo "$body" | grep -q '"status":"SUCCESS"'; then
+            echo "✅ Backup completed successfully"
+          else
+            echo "⚠️ Check backup logs for details"
+          fi
+
+  hourly-backup:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.backup_type == 'hourly'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Hourly/Incremental Backup
+        run: |
+          echo "Triggering incremental backup..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.APP_URL }}/api/webhooks/github-backup" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Backup-Secret: ${{ secrets.BACKUP_WEBHOOK_SECRET }}" \
+            -d '{"type": "hourly", "triggered_by": "github_actions"}')
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response: $body"
+          echo "HTTP Code: $http_code"
+          
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Incremental backup triggered successfully"
+          else
+            echo "❌ Backup trigger failed"
+            exit 1
+          fi
+
+      - name: Wait for Backup Completion
+        run: |
+          echo "Waiting for backup to complete..."
+          sleep 60
+          
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            "${{ secrets.APP_URL }}/api/webhooks/github-backup/status" \
+            -H "X-GitHub-Backup-Secret: ${{ secrets.BACKUP_WEBHOOK_SECRET }}")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Backup Status: $body"
