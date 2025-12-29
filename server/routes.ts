@@ -86,7 +86,8 @@ const helmetMiddleware = helmet({
       styleSrc: [
         "'self'", 
         "'unsafe-inline'", 
-        "https://fonts.googleapis.com"
+        "https://fonts.googleapis.com",
+        "https://cdn.jsdelivr.net"
       ],
       fontSrc: [
         "'self'", 
