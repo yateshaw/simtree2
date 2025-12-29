@@ -75,7 +75,8 @@ const helmetMiddleware = helmet({
         "wss:", 
         "https://api.stripe.com", 
         "https://checkout.stripe.com",
-        "https://m.stripe.com" // Stripe telemetry
+        "https://m.stripe.com", // Stripe telemetry
+        "https://cdn.jsdelivr.net" // For source maps
       ],
       frameSrc: [
         "https://js.stripe.com", 

@@ -1,0 +1,141 @@
+content.js:207 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+Connecting to 'https://cdn.jsdelivr.net/npm/antd@4/dist/antd.min.css.map' violates the following Content Security Policy directive: "connect-src 'self' ws: wss: https://api.stripe.com https://checkout.stripe.com https://m.stripe.com". The request has been blocked.
+
+index-H01VMxzx.js:612 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+(anonymous) @ index-H01VMxzx.js:612
+dx @ index-H01VMxzx.js:40
+v0 @ index-H01VMxzx.js:40
+Rne @ index-H01VMxzx.js:40
+Rp @ index-H01VMxzx.js:40
+bk @ index-H01VMxzx.js:40
+ue @ index-H01VMxzx.js:38
+(anonymous) @ index-H01VMxzx.js:40
+index-H01VMxzx.js:48  POST https://panel.simtree.co/api/esim/purchase 400 (Bad Request)
+pr @ index-H01VMxzx.js:48
+await in pr
+mutationFn @ index-H01VMxzx.js:665
+fn @ index-H01VMxzx.js:48
+y @ index-H01VMxzx.js:48
+start @ index-H01VMxzx.js:48
+execute @ index-H01VMxzx.js:48
+await in execute
+mutate @ index-H01VMxzx.js:48
+M @ index-H01VMxzx.js:665
+onClick @ index-H01VMxzx.js:666
+Re @ index-H01VMxzx.js:37
+br @ index-H01VMxzx.js:37
+fr @ index-H01VMxzx.js:37
+wp @ index-H01VMxzx.js:37
+jp @ index-H01VMxzx.js:37
+(anonymous) @ index-H01VMxzx.js:37
+M4 @ index-H01VMxzx.js:40
+Zt @ index-H01VMxzx.js:37
+Np @ index-H01VMxzx.js:37
+Su @ index-H01VMxzx.js:37
+bd @ index-H01VMxzx.js:37
+index-H01VMxzx.js:665 Plan assignment error: Error: Insufficient wallet balance. Required: $10.29 (including 5% VAT), Available: $0.00
+    at iae (index-H01VMxzx.js:48:43325)
+    at async pr (index-H01VMxzx.js:48:44096)
+    at async Object.mutationFn (index-H01VMxzx.js:665:60735)
+onError @ index-H01VMxzx.js:665
+execute @ index-H01VMxzx.js:48
+await in execute
+mutate @ index-H01VMxzx.js:48
+M @ index-H01VMxzx.js:665
+onClick @ index-H01VMxzx.js:666
+Re @ index-H01VMxzx.js:37
+br @ index-H01VMxzx.js:37
+fr @ index-H01VMxzx.js:37
+wp @ index-H01VMxzx.js:37
+jp @ index-H01VMxzx.js:37
+(anonymous) @ index-H01VMxzx.js:37
+M4 @ index-H01VMxzx.js:40
+Zt @ index-H01VMxzx.js:37
+Np @ index-H01VMxzx.js:37
+Su @ index-H01VMxzx.js:37
+bd @ index-H01VMxzx.js:37
+index-H01VMxzx.js:665 Error in handleAssignPlan: Error: Insufficient wallet balance. Required: $10.29 (including 5% VAT), Available: $0.00
+    at iae (index-H01VMxzx.js:48:43325)
+    at async pr (index-H01VMxzx.js:48:44096)
+    at async Object.mutationFn (index-H01VMxzx.js:665:60735)
+M @ index-H01VMxzx.js:665
+await in M
+onClick @ index-H01VMxzx.js:666
+Re @ index-H01VMxzx.js:37
+br @ index-H01VMxzx.js:37
+fr @ index-H01VMxzx.js:37
+wp @ index-H01VMxzx.js:37
+jp @ index-H01VMxzx.js:37
+(anonymous) @ index-H01VMxzx.js:37
+M4 @ index-H01VMxzx.js:40
+Zt @ index-H01VMxzx.js:37
+Np @ index-H01VMxzx.js:37
+Su @ index-H01VMxzx.js:37
+bd @ index-H01VMxzx.js:37
+index-H01VMxzx.js:666 Plan assignment completed for employee 3 with error: Insufficient wallet balance. Required: $10.29 (including 5% VAT), Available: $0.00
+rt @ index-H01VMxzx.js:666
+M @ index-H01VMxzx.js:665
+await in M
+onClick @ index-H01VMxzx.js:666
+Re @ index-H01VMxzx.js:37
+br @ index-H01VMxzx.js:37
+fr @ index-H01VMxzx.js:37
+wp @ index-H01VMxzx.js:37
+jp @ index-H01VMxzx.js:37
+(anonymous) @ index-H01VMxzx.js:37
+M4 @ index-H01VMxzx.js:40
+Zt @ index-H01VMxzx.js:37
+Np @ index-H01VMxzx.js:37
+Su @ index-H01VMxzx.js:37
+bd @ index-H01VMxzx.js:37
+index-H01VMxzx.js:612 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+(anonymous) @ index-H01VMxzx.js:612
+dx @ index-H01VMxzx.js:40
+v0 @ index-H01VMxzx.js:40
+Rne @ index-H01VMxzx.js:40
+Rp @ index-H01VMxzx.js:40
+bk @ index-H01VMxzx.js:40
+ue @ index-H01VMxzx.js:38
+(anonymous) @ index-H01VMxzx.js:40
+wallet:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <input.__PrivateStripeElement-input>
+Ancestor with aria-hidden: <input.__PrivateStripeElement-input> <input class=​"__PrivateStripeElement-input" aria-hidden=​"true" aria-label=​" " autocomplete=​"false" maxlength=​"1" field_signature=​"1318412689" form_signature=​"25984723751616149" alternative_form_signature=​"12509081419833105263" visibility_annotation=​"false" style=​"border:​ none !important;​ display:​ block !important;​ position:​ absolute !important;​ height:​ 1px !important;​ top:​ -1px !important;​ left:​ 0px !important;​ padding:​ 0px !important;​ margin:​ 0px !important;​ width:​ 100% !important;​ opacity:​ 0 !important;​ background:​ transparent !important;​ pointer-events:​ none !important;​ font-size:​ 16px !important;​">​
+index-H01VMxzx.js:1382 Confirming payment with data: {paymentIntentId: 'pi_3SjmBgQ9Cg2XTrKT1ExZoxsw'}
+index-H01VMxzx.js:612 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+(anonymous) @ index-H01VMxzx.js:612
+dx @ index-H01VMxzx.js:40
+v0 @ index-H01VMxzx.js:40
+Rne @ index-H01VMxzx.js:40
+Rp @ index-H01VMxzx.js:40
+bk @ index-H01VMxzx.js:40
+ue @ index-H01VMxzx.js:38
+(anonymous) @ index-H01VMxzx.js:40
+index-H01VMxzx.js:612 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+(anonymous) @ index-H01VMxzx.js:612
+dx @ index-H01VMxzx.js:40
+v0 @ index-H01VMxzx.js:40
+Rne @ index-H01VMxzx.js:40
+Rp @ index-H01VMxzx.js:40
+bk @ index-H01VMxzx.js:40
+ue @ index-H01VMxzx.js:38
+(anonymous) @ index-H01VMxzx.js:40
+index-H01VMxzx.js:666 Plan assignment completed for employee 3
+rt @ index-H01VMxzx.js:666
+onSuccess @ index-H01VMxzx.js:665
+await in onSuccess
+execute @ index-H01VMxzx.js:48
+await in execute
+mutate @ index-H01VMxzx.js:48
+M @ index-H01VMxzx.js:665
+onClick @ index-H01VMxzx.js:666
+Re @ index-H01VMxzx.js:37
+br @ index-H01VMxzx.js:37
+fr @ index-H01VMxzx.js:37
+wp @ index-H01VMxzx.js:37
+jp @ index-H01VMxzx.js:37
+(anonymous) @ index-H01VMxzx.js:37
+M4 @ index-H01VMxzx.js:40
+Zt @ index-H01VMxzx.js:37
+Np @ index-H01VMxzx.js:37
+Su @ index-H01VMxzx.js:37
+bd @ index-H01VMxzx.js:37
