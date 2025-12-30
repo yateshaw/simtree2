@@ -2141,6 +2141,24 @@ export function registerRoutes(app: Express): Server {
 
       console.log(`Found ${employees.length} employees`);
 
+      // Helper function to enhance eSIM with plan data
+      const enhanceEsimWithPlanData = async (esim: any, employeeName: string) => {
+        const plan = esim.planId ? await storage.getEsimPlanById(esim.planId) : null;
+        return {
+          ...esim,
+          employeeName,
+          employeeId: esim.employeeId,
+          planName: plan?.name || null,
+          dataLimit: plan?.data || null,
+          plan: plan ? {
+            name: plan.name,
+            data: plan.data,
+            validity: plan.validity,
+            countries: plan.countries
+          } : null
+        };
+      };
+
       // Get all purchased eSIMs from database - status updates come via webhooks
       // No need to poll the provider API on every request
       const allEsims: any[] = [];
@@ -2150,8 +2168,8 @@ export function registerRoutes(app: Express): Server {
           const execEsims = await storage.getPurchasedEsims(employee.id);
           if (execEsims && execEsims.length > 0) {
             for (const esim of execEsims) {
-              (esim as any).employeeName = employee.name;
-              allEsims.push(esim);
+              const enhancedEsim = await enhanceEsimWithPlanData(esim, employee.name);
+              allEsims.push(enhancedEsim);
             }
           }
         } catch (err) {
