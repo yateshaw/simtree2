@@ -17,8 +17,8 @@ import { initializeMonitoring } from "./init-monitoring";
 // Commenting out problematic imports temporarily to fix startup
 // import { webhookReliability } from './services/webhook-reliability';
 // import { intelligentSafetyNets } from './services/intelligent-safety-nets';
-// Removed eSIM syncing imports - webhooks handle all status updates
-// import { syncEsimStatuses } from "./cron/esim-status-sync";
+// Re-enabled eSIM sync as backup for missed webhooks
+import { syncEsimStatuses } from "./cron/esim-status-sync";
 // import { syncWalletBalances } from "./cron/wallet-balance-sync";
 // import { syncRevokedEsims } from "./cron/enhanced-revocation-sync";
 import { processAutoRenewals } from "./cron/auto-renewal-job";
@@ -316,7 +316,7 @@ async function startServer() {
 
       httpServer.listen(PORT, HOST, () => {
         log(`Server running on ${HOST}:${PORT}`);
-        log("Webhooks will handle all eSIM status updates in real-time");
+        log("eSIM status updates: webhooks (real-time) + sync job (every 30 min backup)");
         resolve(httpServer);
         
         // Defer all background jobs until after server is fully ready
@@ -347,6 +347,33 @@ async function startServer() {
               timezone: 'America/Argentina/Buenos_Aires'
             });
             log("eSIM plans daily sync scheduled for 04:00 AM Buenos Aires time");
+            
+            // Schedule eSIM status sync to catch missed webhooks (every 30 minutes)
+            cron.schedule('*/30 * * * *', async () => {
+              log("[Sync] Starting scheduled eSIM status sync (backup for missed webhooks)...");
+              try {
+                const updatedCount = await syncEsimStatuses(storage);
+                if (updatedCount > 0) {
+                  log(`[Sync] eSIM status sync complete - updated ${updatedCount} eSIMs`);
+                } else {
+                  log("[Sync] eSIM status sync complete - no updates needed");
+                }
+              } catch (error) {
+                console.error("[Sync] Error during scheduled eSIM status sync:", error);
+              }
+            });
+            log("[Sync] eSIM status sync scheduled every 30 minutes as backup for webhooks");
+            
+            // Run initial sync after 2 minutes to catch any stuck statuses
+            setTimeout(async () => {
+              log("[Sync] Running initial eSIM status sync...");
+              try {
+                const updatedCount = await syncEsimStatuses(storage);
+                log(`[Sync] Initial eSIM status sync complete - updated ${updatedCount} eSIMs`);
+              } catch (error) {
+                console.error("[Sync] Error during initial eSIM status sync:", error);
+              }
+            }, 120000);
           }
           
           // Schedule auto-renewal job to run every 24 hours
