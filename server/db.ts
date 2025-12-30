@@ -85,13 +85,19 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10000, // Reduce connection timeout for faster startup
 });
 
+// Set default schema to public on each connection and log
+pool.on('connect', async (client) => {
+  console.log('Database client connected');
+  try {
+    await client.query('SET search_path TO public');
+  } catch (err) {
+    console.error('Failed to set search_path:', err);
+  }
+});
+
 // Add comprehensive connection error handling
 pool.on('error', (err) => {
   console.error('Database pool error:', err);
-});
-
-pool.on('connect', () => {
-  console.log('Database client connected');
 });
 
 pool.on('remove', () => {
