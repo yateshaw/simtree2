@@ -624,22 +624,29 @@ export default function EmployeeHistory() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          // First check - is this eSIM cancelled or refunded?
-                          // This check includes provider API status checks
-                          if (isEsimCancelledOrRefunded(esim)) {
+                          // Get provider status from eSIM Access API (source of truth)
+                          const providerStatus = (esim.metadata?.rawData?.obj?.esimList?.[0]?.esimStatus || 
+                                                  esim.metadata?.providerStatus || '').toUpperCase();
+                          
+                          // eSIM Access status categories
+                          const ACTIVE_STATUSES = ['ONBOARD', 'ACTIVATED', 'IN_USE', 'ENABLED'];
+                          const EXPIRED_STATUSES = ['EXPIRED', 'DEPLETED', 'DISABLED', 'USED_EXPIRED'];
+                          const CANCELLED_STATUSES = ['CANCEL', 'CANCELLED', 'REVOKED', 'DEACTIVATED'];
+                          const PENDING_STATUSES = ['GOT_RESOURCE', 'CREATED', ''];
+                          
+                          // First check - refunded takes priority
+                          if (esim.refunded) {
                             return (
                               <Badge variant="destructive">
-                                {esim.refunded ? 'Refunded' : 'Cancelled'}
+                                Refunded
                               </Badge>
                             );
                           }
                           
-                          // Get provider status for various status checks
-                          const providerStatus = esim.metadata?.rawData?.obj?.esimList?.[0]?.esimStatus;
-                          
-                          // Check for cancellation - if the provider says CANCEL
-                          if (providerStatus === 'CANCEL') {
-                            if (import.meta.env.DEV) { console.log(`Catching edge case: eSIM ${esim.id} has direct CANCEL status in provider data`); }
+                          // Check cancelled statuses (eSIM Access: CANCEL, CANCELLED, REVOKED, DEACTIVATED)
+                          if (CANCELLED_STATUSES.includes(providerStatus) || 
+                              esim.status === 'cancelled' || 
+                              esim.metadata?.isCancelled === true) {
                             return (
                               <Badge variant="destructive">
                                 Cancelled
@@ -647,30 +654,23 @@ export default function EmployeeHistory() {
                             );
                           }
                           
-                          // PRIORITY 1: Check database status for expired FIRST
-                          // Database status is the source of truth - always check before metadata
-                          if (esim.status === 'expired') {
+                          // Check expired statuses (eSIM Access: EXPIRED, DEPLETED, DISABLED, USED_EXPIRED)
+                          if (EXPIRED_STATUSES.includes(providerStatus) || esim.status === 'expired') {
+                            // Show specific status for more detail
+                            let label = 'Expired';
+                            if (providerStatus === 'DEPLETED' || providerStatus === 'USED_EXPIRED') {
+                              label = 'Data Depleted';
+                            } else if (providerStatus === 'DISABLED') {
+                              label = 'Disabled';
+                            }
                             return (
                               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                                Expired
+                                {label}
                               </Badge>
                             );
                           }
                           
-                          // PRIORITY 2: Check for expired statuses from provider metadata
-                          const providerStatusUpper = providerStatus?.toUpperCase();
-                          if (providerStatusUpper === 'EXPIRED' || providerStatusUpper === 'DEPLETED' || 
-                              providerStatusUpper === 'USED_EXPIRED' || providerStatusUpper === 'DISABLED' || 
-                              providerStatusUpper === 'REVOKED') {
-                            if (import.meta.env.DEV) { console.log(`eSIM ${esim.id} has expired provider status: ${providerStatus}`); }
-                            return (
-                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                                Expired
-                              </Badge>
-                            );
-                          }
-                          
-                          // PRIORITY 3: Check if expiry date has passed
+                          // Check if expiry date has passed
                           if (esim.expiryDate) {
                             const now = new Date();
                             const expiryDate = new Date(esim.expiryDate);
@@ -683,20 +683,27 @@ export default function EmployeeHistory() {
                             }
                           }
                           
-                          // PRIORITY 4: Check if eSIM is active
-                          if (esim.status === 'active' || esim.status === 'activated') {
+                          // Check active statuses (eSIM Access: ONBOARD, ACTIVATED, IN_USE, ENABLED)
+                          if (ACTIVE_STATUSES.includes(providerStatus) || 
+                              esim.status === 'active' || esim.status === 'activated') {
+                            // Show specific status for more detail
+                            let label = 'Active';
+                            if (providerStatus === 'ONBOARD') {
+                              label = 'Onboard';
+                            } else if (providerStatus === 'IN_USE') {
+                              label = 'In Use';
+                            }
                             return (
                               <Badge variant="default" className="bg-green-500 hover:bg-green-600">
                                 <Check className="h-3 w-3 mr-1" />
-                                Active
+                                {label}
                               </Badge>
                             );
                           }
                           
-                          // PRIORITY 5: Check for pending activation
-                          // Only show pending if database status is explicitly 'waiting_for_activation'
-                          // Do NOT rely on metadata.status as it may be stale
-                          if (esim.status === 'waiting_for_activation') {
+                          // Check pending statuses (eSIM Access: GOT_RESOURCE, CREATED, or no status yet)
+                          if (PENDING_STATUSES.includes(providerStatus) || 
+                              esim.status === 'waiting_for_activation') {
                             return (
                               <div>
                                 <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 text-white">
@@ -707,10 +714,10 @@ export default function EmployeeHistory() {
                             );
                           }
                           
-                          // Default or unknown status
+                          // Default - show raw provider status if available
                           return (
                             <Badge variant="outline">
-                              {esim.status || "Unknown"}
+                              {providerStatus || esim.status || "Unknown"}
                             </Badge>
                           );
                         })()}
