@@ -145,6 +145,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         activationDate: new Date(),
         metadata: {
           ...(esim.metadata || {}),
+          status: "activated", // Keep metadata.status in sync with database status
           syncedAt: new Date().toISOString(),
           providerStatus: esimStatus,
           previousStatus: esim.status,
@@ -244,6 +245,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         status: "cancelled",
         metadata: {
           ...(esim.metadata || {}),
+          status: "cancelled", // Keep metadata.status in sync with database status
           syncedAt: new Date().toISOString(),
           providerStatus: esimStatus,
           previousStatus: esim.status,
@@ -295,7 +297,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
       });
       
       console.log(`[eSIM Access Webhook] Successfully updated eSIM ${esim.id} to 'cancelled'`);
-    } else if (EXPIRED_STATUSES.includes(esimStatus)) {
+    } else if (EXPIRED_STATUSES.includes(esimStatus?.toUpperCase())) {
       console.log(`[eSIM Access Webhook] Updating eSIM ${esim.id} status to 'expired' (provider status: ${esimStatus})`);
       
       // Update the eSIM status and data usage if available
@@ -303,6 +305,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         status: "expired",
         metadata: {
           ...(esim.metadata || {}),
+          status: "expired", // Keep metadata.status in sync with database status
           syncedAt: new Date().toISOString(),
           providerStatus: esimStatus,
           previousStatus: esim.status,

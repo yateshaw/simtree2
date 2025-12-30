@@ -96,15 +96,16 @@ export async function syncEsimStatuses(storage: any, esimAccessService?: EsimAcc
         console.log(`[Sync] Checking provider status for eSIM ${esim.id} (${esim.orderId})`);
         const statusData = await esimAccessService.checkEsimStatus(esim.orderId);
         const esimData = statusData.rawData?.obj?.esimList?.[0];
-        const providerStatus = esimData?.esimStatus;
-        const smdpStatus = esimData?.smdpStatus;
+        // Normalize provider statuses to uppercase for consistent comparison
+        const providerStatus = esimData?.esimStatus?.toUpperCase();
+        const smdpStatus = esimData?.smdpStatus?.toUpperCase();
         const orderUsage = esimData?.orderUsage || 0;
         const totalVolume = esimData?.totalVolume || 0;
         
         console.log(`[Sync] Provider data for eSIM ${esim.id}: esimStatus=${providerStatus}, smdpStatus=${smdpStatus}, usage=${orderUsage}/${totalVolume}`);
 
         const ACTIVATED_STATUSES = ['ONBOARD', 'IN_USE', 'ENABLED', 'ACTIVATED'];
-        const EXPIRED_STATUSES = ['EXPIRED', 'DEPLETED', 'DISABLED', 'USED_UP'];
+        const EXPIRED_STATUSES = ['EXPIRED', 'DEPLETED', 'DISABLED', 'USED_UP', 'USED_EXPIRED', 'REVOKED'];
         
         // Check activation from multiple indicators
         const isActivated = ACTIVATED_STATUSES.includes(providerStatus || '') || 
@@ -148,12 +149,13 @@ export async function syncEsimStatuses(storage: any, esimAccessService?: EsimAcc
         } else if (isExpiredOrDepleted && esim.status !== 'expired') {
           console.log(`[Sync] Updating eSIM ${esim.id} status from '${esim.status}' to 'expired' based on provider status: ${providerStatus}`);
 
-          // Update the eSIM status to expired
+          // Update the eSIM status to expired - also update metadata.status for consistency
           await db.update(schema.purchasedEsims)
             .set({
               status: 'expired',
               metadata: {
                 ...(esim.metadata || {}),
+                status: 'expired', // Keep metadata.status in sync with database status
                 syncedAt: new Date().toISOString(),
                 previousStatus: esim.status,
                 providerStatus,
@@ -199,6 +201,7 @@ export async function syncEsimStatuses(storage: any, esimAccessService?: EsimAcc
               activationDate: new Date(),
               metadata: {
                 ...(esim.metadata || {}),
+                status: 'activated', // Keep metadata.status in sync with database status
                 syncedAt: new Date().toISOString(),
                 previousStatus: esim.status,
                 providerStatus,

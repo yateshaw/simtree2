@@ -647,10 +647,21 @@ export default function EmployeeHistory() {
                             );
                           }
                           
-                          // Check for expired statuses from provider (this takes precedence over other statuses)
-                          if (providerStatus === 'EXPIRED' || providerStatus === 'DEPLETED' || 
-                              providerStatus === 'USED_EXPIRED' || providerStatus === 'DISABLED' || 
-                              providerStatus === 'REVOKED') {
+                          // PRIORITY 1: Check database status for expired FIRST
+                          // Database status is the source of truth - always check before metadata
+                          if (esim.status === 'expired') {
+                            return (
+                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                                Expired
+                              </Badge>
+                            );
+                          }
+                          
+                          // PRIORITY 2: Check for expired statuses from provider metadata
+                          const providerStatusUpper = providerStatus?.toUpperCase();
+                          if (providerStatusUpper === 'EXPIRED' || providerStatusUpper === 'DEPLETED' || 
+                              providerStatusUpper === 'USED_EXPIRED' || providerStatusUpper === 'DISABLED' || 
+                              providerStatusUpper === 'REVOKED') {
                             if (import.meta.env.DEV) { console.log(`eSIM ${esim.id} has expired provider status: ${providerStatus}`); }
                             return (
                               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
@@ -659,22 +670,7 @@ export default function EmployeeHistory() {
                             );
                           }
                           
-                          // Second check - is this eSIM pending activation?
-                          // IMPORTANT: Always prioritize database status over metadata status
-                          // Only check metadata status if database status is not conclusive
-                          if (esim.status === 'waiting_for_activation' || 
-                              (esim.status !== 'activated' && esim.status !== 'active' && esim.metadata?.status === 'pending')) {
-                            return (
-                              <div>
-                                <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 text-white">
-                                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                                  Pending Activation
-                                </Badge>
-                              </div>
-                            );
-                          }
-                          
-                          // Check if expiry date has passed
+                          // PRIORITY 3: Check if expiry date has passed
                           if (esim.expiryDate) {
                             const now = new Date();
                             const expiryDate = new Date(esim.expiryDate);
@@ -687,7 +683,7 @@ export default function EmployeeHistory() {
                             }
                           }
                           
-                          // Third check - is this eSIM active?
+                          // PRIORITY 4: Check if eSIM is active
                           if (esim.status === 'active' || esim.status === 'activated') {
                             return (
                               <Badge variant="default" className="bg-green-500 hover:bg-green-600">
@@ -697,12 +693,17 @@ export default function EmployeeHistory() {
                             );
                           }
                           
-                          // Fourth check - is this eSIM expired?
-                          if (esim.status === 'expired') {
+                          // PRIORITY 5: Check for pending activation
+                          // Only show pending if database status is explicitly 'waiting_for_activation'
+                          // Do NOT rely on metadata.status as it may be stale
+                          if (esim.status === 'waiting_for_activation') {
                             return (
-                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                                Expired
-                              </Badge>
+                              <div>
+                                <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 text-white">
+                                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                  Pending Activation
+                                </Badge>
+                              </div>
                             );
                           }
                           
