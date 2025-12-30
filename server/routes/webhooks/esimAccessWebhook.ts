@@ -448,7 +448,38 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         console.log(`[eSIM Access Webhook] No data usage value available for update, skipping`);
       }
     } else if (esim.status === "expired") {
-      console.log(`[eSIM Access Webhook] eSIM ${esim.id} is already in expired state, no update needed`);
+      // Always update providerStatus in metadata even if status is already expired
+      const currentMetadata = (esim.metadata || {}) as any;
+      const normalizedProviderStatus = esimStatus?.toUpperCase();
+      
+      if (normalizedProviderStatus && currentMetadata.providerStatus !== normalizedProviderStatus) {
+        console.log(`[eSIM Access Webhook] Updating providerStatus for already-expired eSIM ${esim.id}: ${currentMetadata.providerStatus} -> ${normalizedProviderStatus}`);
+        
+        await db
+          .update(schema.purchasedEsims)
+          .set({
+            metadata: {
+              ...currentMetadata,
+              syncedAt: new Date().toISOString(),
+              providerStatus: normalizedProviderStatus,
+              viaWebhook: true,
+            },
+          })
+          .where(eq(schema.purchasedEsims.id, esim.id));
+        
+        // Emit SSE event for real-time updates
+        emitEvent(EventTypes.ESIM_STATUS_CHANGE, {
+          esimId: esim.id,
+          employeeId: esim.employeeId,
+          oldStatus: esim.status,
+          newStatus: esim.status,
+          orderId: esim.orderId,
+          providerStatus: normalizedProviderStatus,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log(`[eSIM Access Webhook] eSIM ${esim.id} is already in expired state with same providerStatus, no update needed`);
+      }
     } else {
       console.log(`[eSIM Access Webhook] Unknown status transition for eSIM ${esim.id} (current: ${esim.status}, provider: ${esimStatus})`);
     }

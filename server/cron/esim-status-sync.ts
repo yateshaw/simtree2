@@ -260,12 +260,12 @@ export async function syncEsimStatuses(storage: any, esimAccessService?: EsimAcc
       try {
         const statusData = await esimAccessService.checkEsimStatus(esim.orderId);
         const activatedEsimData = statusData.rawData?.obj?.esimList?.[0];
-        const providerStatus = activatedEsimData?.esimStatus;
-        const smdpStatus = activatedEsimData?.smdpStatus;
+        const providerStatus = activatedEsimData?.esimStatus?.toUpperCase();
+        const smdpStatus = activatedEsimData?.smdpStatus?.toUpperCase();
         const orderUsage = activatedEsimData?.orderUsage || 0;
         const totalVolume = activatedEsimData?.totalVolume || 0;
         
-        const EXPIRED_STATUSES = ['EXPIRED', 'DEPLETED', 'DISABLED', 'USED_UP'];
+        const EXPIRED_STATUSES = ['EXPIRED', 'DEPLETED', 'DISABLED', 'USED_UP', 'USED_EXPIRED'];
         
         const isExpiredOrDepletedActivated = EXPIRED_STATUSES.includes(providerStatus || '') ||
                                               smdpStatus === 'DISABLED' ||
@@ -318,9 +318,71 @@ export async function syncEsimStatuses(storage: any, esimAccessService?: EsimAcc
           });
           
           updatedCount++;
+        } else {
+          // Always update providerStatus in metadata even if status doesn't change
+          const currentMetadata = esim.metadata as EsimMetadata || {};
+          if (currentMetadata.providerStatus !== providerStatus && providerStatus) {
+            console.log(`[Sync] Updating providerStatus for activated eSIM ${esim.id}: ${currentMetadata.providerStatus} -> ${providerStatus}`);
+            await db.update(schema.purchasedEsims)
+              .set({
+                metadata: {
+                  ...currentMetadata,
+                  syncedAt: new Date().toISOString(),
+                  providerStatus,
+                  smdpStatus,
+                }
+              })
+              .where(eq(schema.purchasedEsims.id, esim.id));
+          }
         }
       } catch (error) {
         console.error(`[Sync] Error checking activated eSIM ${esim.id}:`, error);
+      }
+    }
+
+    // Also sync expired eSIMs to update their providerStatus metadata
+    const expiredEsims = await db.select()
+      .from(schema.purchasedEsims)
+      .where(eq(schema.purchasedEsims.status, 'expired'));
+    
+    console.log(`[Sync] Checking ${expiredEsims.length} expired eSIMs for providerStatus sync`);
+    
+    for (const esim of expiredEsims) {
+      try {
+        const currentMetadata = esim.metadata as EsimMetadata || {};
+        
+        // Skip if recently synced (within last hour)
+        if (currentMetadata.syncedAt) {
+          const lastSync = new Date(currentMetadata.syncedAt).getTime();
+          if (Date.now() - lastSync < 3600000) {
+            continue;
+          }
+        }
+        
+        const statusData = await esimAccessService.checkEsimStatus(esim.orderId);
+        const esimData = statusData.rawData?.obj?.esimList?.[0];
+        const providerStatus = esimData?.esimStatus?.toUpperCase();
+        const smdpStatus = esimData?.smdpStatus?.toUpperCase();
+        
+        // Always update providerStatus for expired eSIMs
+        if (providerStatus && currentMetadata.providerStatus !== providerStatus) {
+          console.log(`[Sync] Updating providerStatus for expired eSIM ${esim.id}: ${currentMetadata.providerStatus} -> ${providerStatus}`);
+          
+          await db.update(schema.purchasedEsims)
+            .set({
+              metadata: {
+                ...currentMetadata,
+                syncedAt: new Date().toISOString(),
+                providerStatus,
+                smdpStatus,
+              }
+            })
+            .where(eq(schema.purchasedEsims.id, esim.id));
+          
+          updatedCount++;
+        }
+      } catch (error) {
+        console.error(`[Sync] Error syncing expired eSIM ${esim.id}:`, error);
       }
     }
 
