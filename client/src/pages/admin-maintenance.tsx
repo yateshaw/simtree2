@@ -11,13 +11,48 @@ import StatusUpdates from "@/components/common/StatusUpdates";
 import TemplateManager from "@/components/admin/TemplateManager";
 import { StatusFlowMonitor } from "@/components/admin/StatusFlowMonitor";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Activity, RefreshCw, Users, Mail, Bell } from "lucide-react"; 
+import { ArrowLeft, Activity, RefreshCw, Users, Mail, Bell, Wallet, Loader2 } from "lucide-react"; 
 import { Link, useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function AdminMaintenance() {
   const { user } = useAuth();
   const isSadminUser = user?.username === 'sadmin' && user?.isSuperAdmin;
   const [location] = useLocation();
+  const { toast } = useToast();
+  const [isRebalancing, setIsRebalancing] = useState(false);
+  const [rebalanceResult, setRebalanceResult] = useState<{ updated: number; total: number } | null>(null);
+
+  const handleRebalanceWallets = async () => {
+    setIsRebalancing(true);
+    setRebalanceResult(null);
+    try {
+      const response = await apiRequest('/api/admin/rebalance-wallets', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        setRebalanceResult({ updated: data.updated, total: data.total });
+        toast({
+          title: "Wallets Rebalanced",
+          description: `Successfully updated ${data.updated} of ${data.total} wallets.`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to rebalance wallets",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to rebalance wallets",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRebalancing(false);
+    }
+  };
 
   // Only super admins can access maintenance page
   if (user && !user.isSuperAdmin) {
@@ -135,6 +170,47 @@ export default function AdminMaintenance() {
                 </CardHeader>
                 <CardContent className="pt-5">
                   <FixCompanyDataTool />
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
+                  <CardTitle className="flex items-center gap-2 text-green-800">
+                    <Wallet size={20} />
+                    Wallet Balance Recalculation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-5">
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                      Recalculate all wallet balances from transaction history. Use this if wallet balances appear incorrect or show $0.00.
+                    </p>
+                    <Button 
+                      onClick={handleRebalanceWallets} 
+                      disabled={isRebalancing}
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      data-testid="button-rebalance-wallets"
+                    >
+                      {isRebalancing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Recalculating...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Recalculate All Wallet Balances
+                        </>
+                      )}
+                    </Button>
+                    {rebalanceResult && (
+                      <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                        <p className="text-sm text-green-800">
+                          Updated {rebalanceResult.updated} of {rebalanceResult.total} wallets.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
