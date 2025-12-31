@@ -20,10 +20,9 @@ export default function SystemStatusPage() {
     setIsRebalancing(true);
     setRebalanceResult(null);
     try {
-      const response = await apiRequest('/api/admin/rebalance-wallets', { method: 'POST' });
-      const data = await response.json();
+      const data = await apiRequest<{ success: boolean; message?: string; updated?: number; total?: number }>('/api/admin/rebalance-wallets', { method: 'POST' });
       if (data.success) {
-        setRebalanceResult({ updated: data.updated, total: data.total });
+        setRebalanceResult({ updated: data.updated || 0, total: data.total || 0 });
         toast({
           title: "Wallets Rebalanced",
           description: `Successfully updated ${data.updated} of ${data.total} wallets.`,
