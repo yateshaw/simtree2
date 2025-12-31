@@ -2543,8 +2543,24 @@ export function registerRoutes(app: Express): Server {
             throw new Error("Employee has no company association");
           }
 
-          const refundAmount = parseFloat(plan.retailPrice);
-          console.log(`Issuing refund of ${refundAmount} for cancelled eSIM ${esimId} to company ${employee.companyId}`);
+          // Get company information to check if it's UAE-based for VAT refund
+          const company = await storage.getCompany(employee.companyId);
+          const isUAECompany = company?.country === 'UAE' || company?.country === 'United Arab Emirates';
+          const vatRate = 0.05; // 5% VAT for UAE companies
+          
+          const baseRefundAmount = parseFloat(plan.retailPrice);
+          const vatAmount = isUAECompany ? baseRefundAmount * vatRate : 0;
+          const totalRefundAmount = baseRefundAmount + vatAmount;
+          
+          console.log(`[Refund] VAT calculation for company ${company?.name}:`, {
+            country: company?.country,
+            isUAECompany,
+            baseRefundAmount,
+            vatAmount,
+            totalRefundAmount
+          });
+          
+          console.log(`Issuing refund of ${totalRefundAmount.toFixed(2)} (base: ${baseRefundAmount}, VAT: ${vatAmount.toFixed(2)}) for cancelled eSIM ${esimId} to company ${employee.companyId}`);
           
           // Get the existing wallet or create one if needed
           let wallet;
@@ -2560,10 +2576,10 @@ export function registerRoutes(app: Express): Server {
             throw new Error(`Could not process refund: ${walletError.message}`);
           }
 
-          // Process the wallet credit and verify it succeeded
+          // Process the base refund (retail price) to the wallet
           const creditResult = await storage.addWalletCredit(
             employee.companyId,
-            refundAmount,
+            baseRefundAmount,
             `Refund for cancelled eSIM: ${plan.name} (${employee?.name || 'Unknown employee'})`
           );
 
@@ -2572,7 +2588,54 @@ export function registerRoutes(app: Express): Server {
             throw new Error(`Failed to add wallet credit for company ${employee.companyId}`);
           }
 
-          console.log(`Successfully processed refund of ${refundAmount} to company ${employee.companyId}`);
+          console.log(`Successfully processed base refund of ${baseRefundAmount} to company ${employee.companyId}`);
+
+          // Process VAT refund for UAE companies
+          if (isUAECompany && vatAmount > 0) {
+            try {
+              // Add VAT refund to client wallet
+              const vatCreditResult = await storage.addWalletCredit(
+                employee.companyId,
+                vatAmount,
+                `VAT refund (5%) for cancelled eSIM: ${plan.name} (${employee?.name || 'Unknown employee'})`
+              );
+              
+              if (vatCreditResult) {
+                console.log(`Successfully refunded VAT of ${vatAmount.toFixed(2)} to company ${employee.companyId}`);
+              }
+              
+              // Deduct VAT from SimTree's tax wallet
+              const simtreeCompanyId = await storage.getSadminCompanyId();
+              if (!simtreeCompanyId) {
+                console.error(`Cannot process VAT deduction: SimTree company ID not found`);
+                throw new Error("SimTree company ID not found for VAT deduction");
+              }
+              const simtreeTaxWallet = await storage.getWalletByType(simtreeCompanyId, 'tax');
+              
+              if (simtreeTaxWallet) {
+                // Deduct VAT from tax wallet
+                const taxWalletBalance = parseFloat(simtreeTaxWallet.balance);
+                const newTaxBalance = taxWalletBalance - vatAmount;
+                
+                await storage.updateWalletBalance(simtreeTaxWallet.id, newTaxBalance);
+                await storage.addWalletTransaction(
+                  simtreeTaxWallet.id,
+                  vatAmount,
+                  'debit',
+                  `VAT refund for cancelled eSIM: ${plan.name} (${employee?.name || 'Unknown employee'}) -$${vatAmount.toFixed(2)}`
+                );
+                
+                console.log(`Successfully deducted VAT of ${vatAmount.toFixed(2)} from SimTree tax wallet`);
+              } else {
+                console.warn(`SimTree tax wallet not found - VAT was refunded to client but not deducted from tax wallet`);
+              }
+            } catch (vatError) {
+              // Log but don't block the main refund process
+              console.error(`Error processing VAT refund for eSIM ${esimId}:`, vatError);
+            }
+          }
+
+          console.log(`Successfully processed total refund of ${totalRefundAmount.toFixed(2)} to company ${employee.companyId}`);
 
           // Calculate and reverse the profit in the admin wallet
           if (plan) {
@@ -2585,8 +2648,7 @@ export function registerRoutes(app: Express): Server {
               if (profitAmount > 0) {
                 console.log(`Reversing profit of ${profitAmount.toFixed(2)} for refunded eSIM ${esimId} (${plan.name})`);
                 
-                // Get company name for the transaction description
-                const company = await storage.getCompany(employee.companyId);
+                // Use company already fetched above for VAT calculation
                 const companyName = company?.name || 'Unknown company';
                 
                 // Deduct profit from the sadmin wallet to match the refund
@@ -2610,7 +2672,10 @@ export function registerRoutes(app: Express): Server {
             metadata: {
               ...(latestEsim.metadata as import("../shared/schema").EsimMetadata || {}),
               refunded: true, // Only set this flag after successful refund
-              refundAmount,
+              refundAmount: totalRefundAmount,
+              baseRefundAmount,
+              vatRefundAmount: vatAmount,
+              isUAECompany,
               refundDate: new Date().toISOString(),
               refundedToCompany: employee.companyId,
               pendingRefund: false, // Clear the pending flag
