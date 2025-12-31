@@ -377,11 +377,11 @@ jobs:
             const filePath = `/tmp/${fileName}`;
             
             // Build pg_dump command with error handling
-            let pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
+            let pgDumpCmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             
             if (BACKUP_TYPE === 'hourly') {
               const tableArgs = CRITICAL_TABLES.map(t => `-t ${t}`).join(' ');
-              pgDumpCmd = `pg_dump "${DATABASE_URL}" --no-owner --no-acl ${tableArgs}`;
+              pgDumpCmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl ${tableArgs}`;
             }
             
             // Use bash pipefail to catch pg_dump errors
