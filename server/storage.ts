@@ -195,6 +195,7 @@ export interface IStorage {
   cancelPurchasedEsim(id: number): Promise<PurchasedEsim | null>; // Added method for cancellation
   createMissingWallets(): Promise<number>; // Create wallets for users who don't have them
   deleteCompany(id: number, forceDeletion?: boolean): Promise<void>; // Delete a company and all its associated data
+  rebalanceAllWallets(): Promise<{ updated: number; total: number }>; // Recalculate all wallet balances from transactions
 
   // Stripe payment methods
   createStripeCheckoutSession(
@@ -2027,7 +2028,26 @@ export class DatabaseStorage implements IStorage {
                     createdAt: new Date(), // Use the same timestamp
                   });
                 
-                console.log(`Mirrored transaction ${transaction.id} to SimTree master wallet`);
+                // Update SimTree general wallet balance
+                const [{ simtreeNewBalance }] = await tx
+                  .select({
+                    simtreeNewBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
+                  })
+                  .from(schema.walletTransactions)
+                  .where(and(
+                    eq(schema.walletTransactions.walletId, simtreeGeneralWallet.id),
+                    sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+                  ));
+                
+                await tx
+                  .update(schema.wallets)
+                  .set({
+                    balance: simtreeNewBalance.toString(),
+                    lastUpdated: new Date(),
+                  })
+                  .where(eq(schema.wallets.id, simtreeGeneralWallet.id));
+                
+                console.log(`Mirrored transaction ${transaction.id} to SimTree master wallet, balance: ${simtreeNewBalance}`);
               }
             } else {
               console.warn("SimTree general wallet not found for mirroring transactions");
@@ -2065,13 +2085,56 @@ export class DatabaseStorage implements IStorage {
                   relatedTransactionId: transaction.id, // Link to the original transaction
                   createdAt: new Date(),
                 });
+              
+              // Update company general wallet balance
+              const [{ companyNewBalance }] = await tx
+                .select({
+                  companyNewBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
+                })
+                .from(schema.walletTransactions)
+                .where(and(
+                  eq(schema.walletTransactions.walletId, companyGeneralWallet.id),
+                  sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+                ));
+              
+              await tx
+                .update(schema.wallets)
+                .set({
+                  balance: companyNewBalance.toString(),
+                  lastUpdated: new Date(),
+                })
+                .where(eq(schema.wallets.id, companyGeneralWallet.id));
                 
-              console.log(`Mirrored transaction ${transaction.id} to company general wallet`);
+              console.log(`Mirrored transaction ${transaction.id} to company general wallet, balance: ${companyNewBalance}`);
             }
           }
         }
 
         console.log("Created transaction:", transaction);
+        
+        // Update the wallet balance after adding the transaction
+        // Calculate new balance based on all valid transactions (completed or NULL status for legacy records)
+        const [{ newBalance }] = await tx
+          .select({
+            newBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
+          })
+          .from(schema.walletTransactions)
+          .where(and(
+            eq(schema.walletTransactions.walletId, walletId),
+            sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+          ));
+        
+        // Update the wallet's balance field
+        await tx
+          .update(schema.wallets)
+          .set({
+            balance: newBalance.toString(),
+            lastUpdated: new Date(),
+          })
+          .where(eq(schema.wallets.id, walletId));
+        
+        console.log(`Updated wallet ${walletId} balance to ${newBalance}`);
+        
         return transaction;
       });
     } catch (error) {
@@ -5040,6 +5103,55 @@ export class DatabaseStorage implements IStorage {
         .where(eq(schema.users.companyId, companyId));
     } catch (error) {
       console.error("Error getting users by company ID:", error);
+      throw error;
+    }
+  }
+
+  async rebalanceAllWallets(): Promise<{ updated: number; total: number }> {
+    console.log('Starting wallet balance recalculation...');
+    
+    try {
+      const wallets = await db.select().from(schema.wallets);
+      console.log(`Found ${wallets.length} wallets to check`);
+      
+      let updatedCount = 0;
+      
+      for (const wallet of wallets) {
+        // Calculate balance based on all valid transactions (completed or NULL status for legacy records)
+        const [{ calculatedBalance }] = await db
+          .select({
+            calculatedBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
+          })
+          .from(schema.walletTransactions)
+          .where(and(
+            eq(schema.walletTransactions.walletId, wallet.id),
+            sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+          ));
+        
+        const formattedBalance = parseFloat(calculatedBalance as string).toFixed(2);
+        
+        // Check if balance needs updating
+        if (formattedBalance !== wallet.balance) {
+          console.log(`Updating wallet ${wallet.id} (${wallet.walletType}) balance from ${wallet.balance} to ${formattedBalance}`);
+          
+          await db
+            .update(schema.wallets)
+            .set({
+              balance: formattedBalance,
+              lastUpdated: new Date(),
+            })
+            .where(eq(schema.wallets.id, wallet.id));
+          
+          updatedCount++;
+        } else {
+          console.log(`Wallet ${wallet.id} (${wallet.walletType}) balance is already correct: ${wallet.balance}`);
+        }
+      }
+      
+      console.log(`Wallet balance recalculation complete. Updated ${updatedCount} of ${wallets.length} wallets.`);
+      return { updated: updatedCount, total: wallets.length };
+    } catch (error) {
+      console.error('Error recalculating wallet balances:', error);
       throw error;
     }
   }

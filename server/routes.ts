@@ -4238,6 +4238,23 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Route to rebalance all wallet balances from transactions (super admin only)
+  app.post("/api/admin/rebalance-wallets", requireSuperAdmin, async (req, res, next) => {
+    try {
+      console.log("Rebalancing all wallet balances...");
+      const result = await storage.rebalanceAllWallets();
+      return res.json({ 
+        success: true, 
+        message: `Rebalanced ${result.updated} of ${result.total} wallets`,
+        updated: result.updated,
+        total: result.total
+      });
+    } catch (error) {
+      console.error("Error rebalancing wallets:", error);
+      next(error);
+    }
+  });
+
   // Route to delete a company (super admin only)
   app.delete("/api/admin/companies/:id", requireSuperAdmin, async (req, res, next) => {
     try {
