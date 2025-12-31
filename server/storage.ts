@@ -2036,7 +2036,7 @@ export class DatabaseStorage implements IStorage {
                   .from(schema.walletTransactions)
                   .where(and(
                     eq(schema.walletTransactions.walletId, simtreeGeneralWallet.id),
-                    sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+                    sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) IN ('completed', 'success', 'succeeded', 'processed'))`
                   ));
                 
                 await tx
@@ -2094,7 +2094,7 @@ export class DatabaseStorage implements IStorage {
                 .from(schema.walletTransactions)
                 .where(and(
                   eq(schema.walletTransactions.walletId, companyGeneralWallet.id),
-                  sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+                  sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) IN ('completed', 'success', 'succeeded', 'processed'))`
                 ));
               
               await tx
@@ -2113,7 +2113,7 @@ export class DatabaseStorage implements IStorage {
         console.log("Created transaction:", transaction);
         
         // Update the wallet balance after adding the transaction
-        // Calculate new balance based on all valid transactions (completed or NULL status for legacy records)
+        // Calculate new balance based on all valid transactions (various success statuses or NULL for legacy records)
         const [{ newBalance }] = await tx
           .select({
             newBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
@@ -2121,7 +2121,7 @@ export class DatabaseStorage implements IStorage {
           .from(schema.walletTransactions)
           .where(and(
             eq(schema.walletTransactions.walletId, walletId),
-            sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+            sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) IN ('completed', 'success', 'succeeded', 'processed'))`
           ));
         
         // Update the wallet's balance field
@@ -5117,7 +5117,7 @@ export class DatabaseStorage implements IStorage {
       let updatedCount = 0;
       
       for (const wallet of wallets) {
-        // Calculate balance based on all valid transactions (completed or NULL status for legacy records)
+        // Calculate balance based on all valid transactions (various success statuses or NULL for legacy records)
         const [{ calculatedBalance }] = await db
           .select({
             calculatedBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
@@ -5125,7 +5125,7 @@ export class DatabaseStorage implements IStorage {
           .from(schema.walletTransactions)
           .where(and(
             eq(schema.walletTransactions.walletId, wallet.id),
-            sql`(${schema.walletTransactions.status} = 'completed' OR ${schema.walletTransactions.status} IS NULL)`
+            sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) IN ('completed', 'success', 'succeeded', 'processed'))`
           ));
         
         const formattedBalance = parseFloat(calculatedBalance as string).toFixed(2);
