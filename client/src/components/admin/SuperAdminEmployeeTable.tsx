@@ -166,6 +166,7 @@ export default function SuperAdminEmployeeTable({ employees, purchasedEsimsData 
           id: -1,
           employeeId: employee.id,
           planId: activePlan.id,
+          planName: activePlan.name,
           status: 'waiting_for_activation',
           purchaseDate: new Date().toISOString(),
           dataUsed: "0.00",
@@ -190,8 +191,9 @@ export default function SuperAdminEmployeeTable({ employees, purchasedEsimsData 
         // Add plan details to the eSIM object for display
         const esimWithPlan = {
           ...activeEsim,
+          planName: activeEsim.planName || activePlan.name,
           plan: {
-            name: activePlan.name, // Always use the actual plan name from the API
+            name: activePlan.name,
             data: activePlan.data,
             validity: activePlan.validity,
             countries: activePlan.countries,
