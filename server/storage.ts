@@ -1100,8 +1100,49 @@ export class DatabaseStorage implements IStorage {
   async migrateSimtreeWallets(): Promise<{ migrated: number; created: number; message: string }> {
     console.log('[Storage] Starting SimTree wallet fix...');
     
-    // SimTree platform owner always uses company ID 1
-    const simtreeCompanyId = 1;
+    // First, ensure a SimTree platform company exists
+    // Check if company ID 1 exists
+    const existingCompany = await db
+      .select()
+      .from(schema.companies)
+      .where(eq(schema.companies.id, 1))
+      .limit(1);
+    
+    let simtreeCompanyId: number;
+    
+    if (existingCompany.length === 0) {
+      // No company with ID 1 exists, look for any company named SimTree
+      const simtreeByName = await db
+        .select()
+        .from(schema.companies)
+        .where(sql`LOWER(name) = 'simtree'`)
+        .limit(1);
+      
+      if (simtreeByName.length > 0) {
+        simtreeCompanyId = simtreeByName[0].id;
+        console.log(`[Storage] Found SimTree company by name with ID: ${simtreeCompanyId}`);
+      } else {
+        // Create a SimTree platform company
+        console.log('[Storage] Creating SimTree platform company...');
+        const [newCompany] = await db
+          .insert(schema.companies)
+          .values({
+            name: 'SimTree',
+            email: 'platform@simtree.co',
+            country: 'Platform',
+            active: true,
+            verified: true,
+            createdAt: new Date(),
+          })
+          .returning();
+        simtreeCompanyId = newCompany.id;
+        console.log(`[Storage] Created SimTree platform company with ID: ${simtreeCompanyId}`);
+      }
+    } else {
+      simtreeCompanyId = 1;
+      console.log(`[Storage] Using existing company ID 1: ${existingCompany[0].name}`);
+    }
+    
     console.log(`[Storage] Using SimTree platform company ID: ${simtreeCompanyId}`);
     
     let created = 0;
