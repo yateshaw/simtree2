@@ -562,7 +562,7 @@ export function EsimDetails({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
                     <h3 className="text-sm text-muted-foreground">Plan Name</h3>
-                    <p className="font-medium">{planName || 'Unknown'}</p>
+                    <p className="font-medium">{planName || (esim as any)?.planName || 'Unknown'}</p>
                   </div>
                   <div>
                     <h3 className="text-sm text-muted-foreground">Speed</h3>
@@ -933,7 +933,7 @@ export function EsimDetails({
         employeeId={employeeId || 0}
         esimName={typeof (esim as any)?.plan?.name === 'string' 
           ? (esim as any).plan.name 
-          : (planName || "Unknown Plan")}
+          : (planName || (esim as any)?.planName || "Unknown Plan")}
         employeeName={employeeName || "Unknown Employee"}
       />
     </>
