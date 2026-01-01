@@ -1050,7 +1050,24 @@ export class DatabaseStorage implements IStorage {
    */
   async createSimtreeWallets() {
     console.log(`[Storage] Creating SimTree wallets`);
-    const simtreeCompanyId = await this.getSadminCompanyId() || 1;
+    
+    // Get SimTree company ID with fallback logic
+    let simtreeCompanyId = await this.getSadminCompanyId();
+    
+    if (!simtreeCompanyId) {
+      // Look up company by name as fallback
+      const simtreeCompany = await db
+        .select()
+        .from(schema.companies)
+        .where(sql`LOWER(name) = 'simtree'`)
+        .limit(1);
+      
+      if (simtreeCompany.length > 0) {
+        simtreeCompanyId = simtreeCompany[0].id;
+      } else {
+        simtreeCompanyId = 1; // Default fallback
+      }
+    }
     console.log(`[Storage] Using SimTree company ID: ${simtreeCompanyId}`);
     const walletTypes: schema.WalletType[] = ['general', 'profit', 'provider', 'stripe_fees', 'tax'];
     const createdWallets = [];
@@ -1098,11 +1115,28 @@ export class DatabaseStorage implements IStorage {
   async migrateSimtreeWallets(): Promise<{ migrated: number; created: number; message: string }> {
     console.log('[Storage] Starting SimTree wallet migration...');
     
-    const simtreeCompanyId = await this.getSadminCompanyId();
+    // Try to get SimTree company ID - first from sadmin user, then by company name
+    let simtreeCompanyId = await this.getSadminCompanyId();
+    
     if (!simtreeCompanyId) {
-      throw new Error('Could not determine SimTree company ID');
+      console.log('[Storage] getSadminCompanyId returned null, looking up company by name...');
+      // Look up company by name as fallback
+      const simtreeCompany = await db
+        .select()
+        .from(schema.companies)
+        .where(sql`LOWER(name) = 'simtree'`)
+        .limit(1);
+      
+      if (simtreeCompany.length > 0) {
+        simtreeCompanyId = simtreeCompany[0].id;
+        console.log(`[Storage] Found SimTree company by name: ID ${simtreeCompanyId}`);
+      } else {
+        // If no SimTree company exists, use company ID 1 (default)
+        console.log('[Storage] No SimTree company found, defaulting to company ID 1');
+        simtreeCompanyId = 1;
+      }
     }
-    console.log(`[Storage] SimTree company ID: ${simtreeCompanyId}`);
+    console.log(`[Storage] Using SimTree company ID: ${simtreeCompanyId}`);
     
     let migrated = 0;
     let created = 0;
