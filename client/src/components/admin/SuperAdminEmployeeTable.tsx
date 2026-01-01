@@ -652,6 +652,7 @@ export default function SuperAdminEmployeeTable({ employees, purchasedEsimsData 
         isOpen={showDetailsDialog}
         onClose={handleDetailsClose}
         esim={selectedEsim}
+        planName={selectedEsim?.planName}
         employeeName={selectedEmployee?.name}
         employeeId={selectedEmployee?.id}
       />

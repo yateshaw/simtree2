@@ -5111,26 +5111,40 @@ export class DatabaseStorage implements IStorage {
     console.log('Starting wallet balance recalculation...');
     
     try {
+      // First, log all distinct transaction statuses to help debug
+      const statusList = await db
+        .select({
+          status: schema.walletTransactions.status,
+          count: sql`COUNT(*)`,
+        })
+        .from(schema.walletTransactions)
+        .groupBy(schema.walletTransactions.status);
+      console.log('Transaction statuses in database:', JSON.stringify(statusList));
+      
       const wallets = await db.select().from(schema.wallets);
       console.log(`Found ${wallets.length} wallets to check`);
       
       let updatedCount = 0;
       
       for (const wallet of wallets) {
-        // Calculate balance based on all valid transactions (various success statuses or NULL for legacy records)
-        const [{ calculatedBalance }] = await db
+        // Calculate balance based on ALL transactions except explicitly failed ones
+        // This includes NULL status, 'completed', 'success', 'succeeded', 'processed', 'pending', etc.
+        const [{ calculatedBalance, txCount }] = await db
           .select({
             calculatedBalance: sql`COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE -amount::numeric END), 0)`,
+            txCount: sql`COUNT(*)`,
           })
           .from(schema.walletTransactions)
           .where(and(
             eq(schema.walletTransactions.walletId, wallet.id),
-            sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) IN ('completed', 'success', 'succeeded', 'processed'))`
+            sql`(${schema.walletTransactions.status} IS NULL OR LOWER(${schema.walletTransactions.status}) NOT IN ('failed', 'cancelled', 'refunded', 'rejected', 'error'))`
           ));
         
         const formattedBalance = parseFloat(calculatedBalance as string).toFixed(2);
         
-        // Check if balance needs updating
+        console.log(`Wallet ${wallet.id} (${wallet.walletType}): ${txCount} transactions, calculated balance: ${formattedBalance}, current: ${wallet.balance}`);
+        
+        // Always update the balance
         if (formattedBalance !== wallet.balance) {
           console.log(`Updating wallet ${wallet.id} (${wallet.walletType}) balance from ${wallet.balance} to ${formattedBalance}`);
           

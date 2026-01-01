@@ -732,8 +732,8 @@ export default function EsimManager({ employeeId, employees = [], plans = [] }: 
             setSelectedEsim(null);
           }}
           esim={selectedEsim}
-          planName={selectedEsim.plan?.name}
-          employeeId={employeeId} // Pass employeeId
+          planName={selectedEsim.planName}
+          employeeId={employeeId}
           onRefresh={refreshEsimStatus}
         />
       )}

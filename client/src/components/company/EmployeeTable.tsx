@@ -1326,7 +1326,7 @@ export default function EmployeeTable({
             setSelectedEmployee(null);
           }}
           esim={selectedEsim}
-          planName={selectedEsim.plan?.name}
+          planName={selectedEsim.planName}
           employeeName={selectedEmployee.name}
           employeeId={selectedEmployee.id}
         />
