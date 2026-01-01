@@ -1170,25 +1170,12 @@ export class DatabaseStorage implements IStorage {
     
     console.log(`[Storage] Found ${simtreeWallets.length} SimTree wallets (company ID ${simtreeCompanyId})`);
     
-    // CRITICAL: Backfill wallet_id on transactions that have NULL wallet_id
-    // This fixes historical data where transactions were created with company_id + wallet_type but no wallet_id
-    let backfilledCount = 0;
-    for (const wallet of simtreeWallets) {
-      // Find transactions with matching company_id and wallet_type but NULL wallet_id
-      const result = await db.execute(sql`
-        UPDATE wallet_transactions 
-        SET wallet_id = ${wallet.id}
-        WHERE company_id = ${simtreeCompanyId}
-          AND wallet_type = ${wallet.walletType}
-          AND wallet_id IS NULL
-      `);
-      const rowCount = (result as any).rowCount || 0;
-      if (rowCount > 0) {
-        console.log(`[Storage] Backfilled ${rowCount} transactions to wallet ${wallet.id} (${wallet.walletType})`);
-        backfilledCount += rowCount;
-      }
-    }
-    console.log(`[Storage] Total backfilled transactions: ${backfilledCount}`);
+    // Check for orphaned transactions (wallet_id is NULL) for diagnostic purposes
+    const orphanedTx = await db.execute(sql`
+      SELECT COUNT(*) as count FROM wallet_transactions WHERE wallet_id IS NULL
+    `);
+    const orphanCount = (orphanedTx as any).rows?.[0]?.count || 0;
+    console.log(`[Storage] Found ${orphanCount} transactions with NULL wallet_id (orphaned)`);
     
     // Log transaction counts after backfill
     for (const wallet of simtreeWallets) {
