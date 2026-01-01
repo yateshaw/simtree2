@@ -287,10 +287,11 @@ export default function WalletManagement({ defaultTab = 'simtree' }: WalletManag
   };
 
   // Identify different types of wallets
+  // SimTree is identified by company name (case-insensitive) - DO NOT hardcode company ID
+  // as it varies between environments (e.g., production has company ID 3)
   const isSimTreeWallet = (wallet: Wallet & { companyName?: string }) => {
     const companyName = getCompanyName(wallet);
-    return companyName.toLowerCase().includes('simtree') || 
-           (wallet.companyId === 1); // Simtree company ID is 1
+    return companyName.toLowerCase().includes('simtree');
   };
 
   const isProviderWallet = (wallet: Wallet & { companyName?: string }) => {

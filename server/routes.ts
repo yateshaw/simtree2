@@ -3194,7 +3194,9 @@ export function registerRoutes(app: Express): Server {
 
         // Automatic SimTree wallet balance correction
         // This ensures the wallet balance is automatically corrected to match transactions
-        const simtreeWallet = wallets.find(w => w.id === 2296 || (w.companyId === 11));
+        // Find SimTree by company name (case-insensitive) - don't hardcode IDs as they vary by environment
+        const simtreeCompany = companies.find(c => c.name.toLowerCase().includes('simtree'));
+        const simtreeWallet = simtreeCompany ? wallets.find(w => w.companyId === simtreeCompany.id && w.walletType === 'general') : null;
         if (simtreeWallet) {
           // Get all transactions for this wallet
           const simtreeTransactions = transactions.filter(tx => tx.walletId === simtreeWallet.id);
@@ -5270,8 +5272,12 @@ export function registerRoutes(app: Express): Server {
         // For admin users (SimTree company), deduct fees from profit wallet
         if (req.user.role === 'admin' || req.user.role === 'superadmin') {
           try {
-            // Get SimTree company ID (assuming it's company ID 1)
-            const simtreeCompanyId = 1;
+            // Get SimTree company ID dynamically by looking it up by name
+            const simtreeCompanyId = await storage.getPlatformCompanyId();
+            if (!simtreeCompanyId) {
+              console.error("SimTree company not found for fee processing");
+              throw new Error("SimTree company not found");
+            }
             
             // Get profit wallet for SimTree
             const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
@@ -5410,8 +5416,11 @@ export function registerRoutes(app: Express): Server {
       // For admin users (SimTree company), deduct fees from profit wallet
       if (req.user.role === 'admin' || req.user.role === 'superadmin') {
         try {
-          const simtreeCompanyId = 1;
-          const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
+          const simtreeCompanyId = await storage.getPlatformCompanyId();
+          if (!simtreeCompanyId) {
+            console.error("SimTree company not found for test fee processing");
+          }
+          const profitWallet = simtreeCompanyId ? await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit') : null;
 
           if (profitWallet) {
             // Deduct all fees from profit wallet only

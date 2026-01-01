@@ -108,9 +108,8 @@ export default function AdminWalletManager() {
       companyIdMap[company.id] = company.name;
     });
     
-    // Special case for Simtree - ensure consistent naming
-    if ((wallet.companyId === 1) || 
-        (wallet.companyName && wallet.companyName.toLowerCase().includes('simtree'))) {
+    // Special case for Simtree - ensure consistent naming by company name (not hardcoded ID)
+    if (wallet.companyName && wallet.companyName.toLowerCase().includes('simtree')) {
       return "Simtree";
     }
 
@@ -135,10 +134,10 @@ export default function AdminWalletManager() {
   };
 
   // Identify if a wallet belongs to SimTree (platform)
+  // Use company name only - DO NOT hardcode company IDs as they vary by environment
   const isSimTreeWallet = (wallet: Wallet & { companyName?: string }) => {
     const companyName = getCompanyName(wallet);
-    return companyName.toLowerCase().includes('simtree') || 
-           (wallet.companyId === 11); // Simtree company ID is 11 based on logs
+    return companyName.toLowerCase().includes('simtree');
   };
 
   // Find selected company name for display
@@ -180,6 +179,14 @@ export default function AdminWalletManager() {
     const balance = Number(wallet.balance) || 0;
     return sum + balance;
   }, 0);
+  
+  // Find SimTree company ID dynamically (for UI conditional logic)
+  const simtreeCompany = typedCompanies.find(c => c.name.toLowerCase().includes('simtree'));
+  const simtreeCompanyId = simtreeCompany?.id?.toString() || '';
+  
+  // Check if selected company is SimTree
+  const isSimTreeSelected = selectedCompany === simtreeCompanyId || 
+    (selectedCompany !== 'all' && typedCompanies.find(c => c.id === parseInt(selectedCompany))?.name.toLowerCase().includes('simtree'));
   
   // Note: Manual balance recalculation has been removed
   // All wallet balances are now automatically calculated and maintained by the system
@@ -258,8 +265,8 @@ export default function AdminWalletManager() {
         </CardContent>
       </Card>
       
-      {/* Client Company Balances - Hide when SimTree (ID 11) is selected */}
-      {selectedCompany !== "11" && (
+      {/* Client Company Balances - Hide when SimTree is selected */}
+      {!isSimTreeSelected && (
         <Card className="overflow-hidden border-0 shadow-md bg-gradient-to-br from-indigo-50 to-blue-50 hover:shadow-lg transition-all">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-indigo-800">
@@ -430,18 +437,18 @@ export default function AdminWalletManager() {
       )}
 
       <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-all">
-        <CardHeader className={`bg-gradient-to-r ${selectedCompany === "11" ? "from-purple-50 to-violet-50" : "from-emerald-50 to-green-50"} pb-3`}>
-          <CardTitle className={`flex items-center gap-2 ${selectedCompany === "11" ? "text-purple-800" : "text-emerald-800"}`}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`${selectedCompany === "11" ? "text-purple-700" : "text-emerald-700"}`}>
+        <CardHeader className={`bg-gradient-to-r ${isSimTreeSelected ? "from-purple-50 to-violet-50" : "from-emerald-50 to-green-50"} pb-3`}>
+          <CardTitle className={`flex items-center gap-2 ${isSimTreeSelected ? "text-purple-800" : "text-emerald-800"}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`${isSimTreeSelected ? "text-purple-700" : "text-emerald-700"}`}>
               <rect width="20" height="14" x="2" y="5" rx="2"></rect>
               <line x1="2" x2="22" y1="10" y2="10"></line>
             </svg>
             {selectedCompany === "all" ? "All Transactions" : 
-             (selectedCompany === "11" ? "SimTree Transactions" : `${typedCompanies.find(c => c.id === parseInt(selectedCompany))?.name}'s Transactions`)}
+             (isSimTreeSelected ? "SimTree Transactions" : `${typedCompanies.find(c => c.id === parseInt(selectedCompany))?.name}'s Transactions`)}
           </CardTitle>
-          <p className={`text-sm ${selectedCompany === "11" ? "text-purple-600" : "text-emerald-600"} font-medium mt-2`}>
+          <p className={`text-sm ${isSimTreeSelected ? "text-purple-600" : "text-emerald-600"} font-medium mt-2`}>
             {selectedCompany === "all" ? "Transaction history across all company wallets" : 
-             (selectedCompany === "11" ? "Transaction history for SimTree" : "Transaction history for selected company")}
+             (isSimTreeSelected ? "Transaction history for SimTree" : "Transaction history for selected company")}
           </p>
         </CardHeader>
         <CardContent className="pt-5">
@@ -586,9 +593,8 @@ export default function AdminWalletManager() {
                     return null;
                   };
                   
-                  // Special case for Simtree - ensure consistent naming
-                  if ((tx.companyId === 1) || 
-                      (tx.companyName && tx.companyName.toLowerCase().includes('simtree'))) {
+                  // Special case for Simtree - ensure consistent naming (use name only, not hardcoded IDs)
+                  if (tx.companyName && tx.companyName.toLowerCase().includes('simtree')) {
                     return (
                       <div className="font-medium text-indigo-800">
                         Simtree
