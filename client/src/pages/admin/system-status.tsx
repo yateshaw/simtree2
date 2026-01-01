@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import SadminLayout from "@/components/layout/SadminLayout";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Wallet, RefreshCw, Loader2 } from "lucide-react";
+import { ArrowLeft, Wallet, RefreshCw, Loader2, Database } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -15,6 +15,8 @@ export default function SystemStatusPage() {
   const { toast } = useToast();
   const [isRebalancing, setIsRebalancing] = useState(false);
   const [rebalanceResult, setRebalanceResult] = useState<{ updated: number; total: number } | null>(null);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<{ migrated: number; created: number; message: string } | null>(null);
 
   const handleRebalanceWallets = async () => {
     setIsRebalancing(true);
@@ -42,6 +44,35 @@ export default function SystemStatusPage() {
       });
     } finally {
       setIsRebalancing(false);
+    }
+  };
+
+  const handleMigrateSimtreeWallets = async () => {
+    setIsMigrating(true);
+    setMigrateResult(null);
+    try {
+      const data = await apiRequest<{ success: boolean; message?: string; migrated?: number; created?: number }>('/api/admin/migrate-simtree-wallets', { method: 'POST' });
+      if (data.success) {
+        setMigrateResult({ migrated: data.migrated || 0, created: data.created || 0, message: data.message || '' });
+        toast({
+          title: "SimTree Wallets Migrated",
+          description: data.message || "Migration completed successfully.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to migrate SimTree wallets",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to migrate SimTree wallets",
+        variant: "destructive",
+      });
+    } finally {
+      setIsMigrating(false);
     }
   };
   
@@ -140,6 +171,47 @@ export default function SystemStatusPage() {
                 <div className="bg-green-50 border border-green-200 rounded-md p-3">
                   <p className="text-sm text-green-800">
                     Updated {rebalanceResult.updated} of {rebalanceResult.total} wallets.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-all">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 pb-3">
+            <CardTitle className="flex items-center gap-2 text-blue-800">
+              <Database size={20} />
+              SimTree Wallet Migration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Fix SimTree wallet data. Use this if SimTree wallets show $0.00 after recalculation - it migrates wallets to the correct company ID and recalculates balances.
+              </p>
+              <Button 
+                onClick={handleMigrateSimtreeWallets} 
+                disabled={isMigrating}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                data-testid="button-migrate-simtree-wallets"
+              >
+                {isMigrating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Migrating...
+                  </>
+                ) : (
+                  <>
+                    <Database className="mr-2 h-4 w-4" />
+                    Migrate SimTree Wallets
+                  </>
+                )}
+              </Button>
+              {migrateResult && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <p className="text-sm text-blue-800">
+                    {migrateResult.message}
                   </p>
                 </div>
               )}

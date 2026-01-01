@@ -196,6 +196,7 @@ export interface IStorage {
   createMissingWallets(): Promise<number>; // Create wallets for users who don't have them
   deleteCompany(id: number, forceDeletion?: boolean): Promise<void>; // Delete a company and all its associated data
   rebalanceAllWallets(): Promise<{ updated: number; total: number }>; // Recalculate all wallet balances from transactions
+  migrateSimtreeWallets(): Promise<{ migrated: number; created: number; message: string }>; // Fix SimTree wallet companyId mismatch
 
   // Stripe payment methods
   createStripeCheckoutSession(
@@ -1043,13 +1044,14 @@ export class DatabaseStorage implements IStorage {
   }
   
   /**
-   * Creates all required wallets for SimTree (company ID 1)
-   * SimTree should have general, profit, and provider wallet types
+   * Creates all required wallets for SimTree using dynamic company ID
+   * SimTree should have general, profit, provider, stripe_fees, and tax wallet types
    * @returns Array of created wallets
    */
   async createSimtreeWallets() {
     console.log(`[Storage] Creating SimTree wallets`);
-    const simtreeCompanyId = 1;
+    const simtreeCompanyId = await this.getSadminCompanyId() || 1;
+    console.log(`[Storage] Using SimTree company ID: ${simtreeCompanyId}`);
     const walletTypes: schema.WalletType[] = ['general', 'profit', 'provider', 'stripe_fees', 'tax'];
     const createdWallets = [];
     
@@ -1086,6 +1088,102 @@ export class DatabaseStorage implements IStorage {
     }
     
     return createdWallets;
+  }
+
+  /**
+   * Migrate SimTree wallets from old company ID to correct company ID
+   * This fixes the production data mismatch where wallets were created with companyId 1
+   * but transactions are recorded for companyId 2 (the actual SimTree company)
+   */
+  async migrateSimtreeWallets(): Promise<{ migrated: number; created: number; message: string }> {
+    console.log('[Storage] Starting SimTree wallet migration...');
+    
+    const simtreeCompanyId = await this.getSadminCompanyId();
+    if (!simtreeCompanyId) {
+      throw new Error('Could not determine SimTree company ID');
+    }
+    console.log(`[Storage] SimTree company ID: ${simtreeCompanyId}`);
+    
+    let migrated = 0;
+    let created = 0;
+    
+    // First check if wallets exist for old hardcoded company ID 1 (if simtree is not company 1)
+    if (simtreeCompanyId !== 1) {
+      const oldWallets = await db
+        .select()
+        .from(schema.wallets)
+        .where(eq(schema.wallets.companyId, 1));
+      
+      console.log(`[Storage] Found ${oldWallets.length} wallets with company ID 1`);
+      
+      // Check each old wallet and migrate if needed
+      for (const oldWallet of oldWallets) {
+        // Check if a wallet with same type already exists for correct company ID
+        const existingWallet = await db
+          .select()
+          .from(schema.wallets)
+          .where(and(
+            eq(schema.wallets.companyId, simtreeCompanyId),
+            eq(schema.wallets.walletType, oldWallet.walletType)
+          ))
+          .limit(1);
+        
+        if (existingWallet.length === 0) {
+          // Migrate transactions from old wallet to new wallet first, then update wallet
+          console.log(`[Storage] Migrating ${oldWallet.walletType} wallet from company 1 to ${simtreeCompanyId}`);
+          
+          await db
+            .update(schema.wallets)
+            .set({ companyId: simtreeCompanyId })
+            .where(eq(schema.wallets.id, oldWallet.id));
+          
+          migrated++;
+        } else {
+          // Wallet exists, migrate transactions from old wallet to new wallet
+          console.log(`[Storage] ${oldWallet.walletType} wallet already exists for company ${simtreeCompanyId}, migrating transactions`);
+          
+          await db
+            .update(schema.walletTransactions)
+            .set({ walletId: existingWallet[0].id })
+            .where(eq(schema.walletTransactions.walletId, oldWallet.id));
+        }
+      }
+    }
+    
+    // Ensure all required wallet types exist for SimTree
+    const walletTypes: schema.WalletType[] = ['general', 'profit', 'provider', 'stripe_fees', 'tax'];
+    
+    for (const walletType of walletTypes) {
+      const existingWallet = await db
+        .select()
+        .from(schema.wallets)
+        .where(and(
+          eq(schema.wallets.companyId, simtreeCompanyId),
+          eq(schema.wallets.walletType, walletType)
+        ))
+        .limit(1);
+      
+      if (existingWallet.length === 0) {
+        console.log(`[Storage] Creating missing ${walletType} wallet for SimTree`);
+        await db
+          .insert(schema.wallets)
+          .values({
+            companyId: simtreeCompanyId,
+            balance: '0.00',
+            lastUpdated: new Date(),
+            walletType,
+          });
+        created++;
+      }
+    }
+    
+    // Now run rebalance to fix all balances
+    const rebalanceResult = await this.rebalanceAllWallets();
+    
+    const message = `Migration complete: ${migrated} wallets migrated, ${created} wallets created, ${rebalanceResult.updated} of ${rebalanceResult.total} wallet balances updated`;
+    console.log(`[Storage] ${message}`);
+    
+    return { migrated, created, message };
   }
 
   async updateCompany(id: number, data: Partial<Company>): Promise<Company> {

@@ -4255,6 +4255,23 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Route to migrate SimTree wallets - fixes companyId mismatch (super admin only)
+  app.post("/api/admin/migrate-simtree-wallets", requireSuperAdmin, async (req, res, next) => {
+    try {
+      console.log("Migrating SimTree wallets...");
+      const result = await storage.migrateSimtreeWallets();
+      return res.json({ 
+        success: true, 
+        message: result.message,
+        migrated: result.migrated,
+        created: result.created
+      });
+    } catch (error) {
+      console.error("Error migrating SimTree wallets:", error);
+      next(error);
+    }
+  });
+
   // Route to delete a company (super admin only)
   app.delete("/api/admin/companies/:id", requireSuperAdmin, async (req, res, next) => {
     try {
