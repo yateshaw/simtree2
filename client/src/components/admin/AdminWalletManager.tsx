@@ -185,8 +185,10 @@ export default function AdminWalletManager() {
   const simtreeCompanyId = simtreeCompany?.id?.toString() || '';
   
   // Check if selected company is SimTree
-  const isSimTreeSelected = selectedCompany === simtreeCompanyId || 
-    (selectedCompany !== 'all' && typedCompanies.find(c => c.id === parseInt(selectedCompany))?.name.toLowerCase().includes('simtree'));
+  const selectedCompanyNameLower = selectedCompany !== 'all' 
+    ? typedCompanies.find(c => c.id === parseInt(selectedCompany))?.name?.toLowerCase() ?? ''
+    : '';
+  const isSimTreeSelected = selectedCompany === simtreeCompanyId || selectedCompanyNameLower.includes('simtree');
   
   // Note: Manual balance recalculation has been removed
   // All wallet balances are now automatically calculated and maintained by the system
