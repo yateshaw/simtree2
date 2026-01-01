@@ -1162,7 +1162,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Log all SimTree wallets and their transactions
+    // Get all SimTree wallets
     const simtreeWallets = await db
       .select()
       .from(schema.wallets)
@@ -1170,6 +1170,27 @@ export class DatabaseStorage implements IStorage {
     
     console.log(`[Storage] Found ${simtreeWallets.length} SimTree wallets (company ID ${simtreeCompanyId})`);
     
+    // CRITICAL: Backfill wallet_id on transactions that have NULL wallet_id
+    // This fixes historical data where transactions were created with company_id + wallet_type but no wallet_id
+    let backfilledCount = 0;
+    for (const wallet of simtreeWallets) {
+      // Find transactions with matching company_id and wallet_type but NULL wallet_id
+      const result = await db.execute(sql`
+        UPDATE wallet_transactions 
+        SET wallet_id = ${wallet.id}
+        WHERE company_id = ${simtreeCompanyId}
+          AND wallet_type = ${wallet.walletType}
+          AND wallet_id IS NULL
+      `);
+      const rowCount = (result as any).rowCount || 0;
+      if (rowCount > 0) {
+        console.log(`[Storage] Backfilled ${rowCount} transactions to wallet ${wallet.id} (${wallet.walletType})`);
+        backfilledCount += rowCount;
+      }
+    }
+    console.log(`[Storage] Total backfilled transactions: ${backfilledCount}`);
+    
+    // Log transaction counts after backfill
     for (const wallet of simtreeWallets) {
       const txCount = await db
         .select({ count: sql`COUNT(*)` })

@@ -4528,8 +4528,15 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/wallet/transactions", async (req, res, next) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
-      // If the user has a companyId, use that, otherwise use their user ID
-      const companyId = req.user.companyId || req.user.id;
+      // For sadmin/superadmin, use the platform company (SimTree) ID
+      // For regular users, use their companyId
+      let companyId: number;
+      if (req.user.username === 'sadmin' || req.user.isSuperAdmin) {
+        const platformId = await storage.getPlatformCompanyId();
+        companyId = platformId || req.user.companyId || req.user.id;
+      } else {
+        companyId = req.user.companyId || req.user.id;
+      }
       console.log(`Fetching wallet transactions for user ${req.user.id} (company ${companyId})`);
 
       // Support optional wallet type filter
@@ -4561,9 +4568,19 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/wallet/balances-by-type", async (req, res, next) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
-      // Check if companyId is provided in query parameter, otherwise use user's companyId or user ID
+      // Check if companyId is provided in query parameter
       const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
-      const companyId = queryCompanyId || req.user.companyId || req.user.id;
+      
+      // For sadmin/superadmin without explicit query param, use platform company (SimTree) ID
+      let companyId: number;
+      if (queryCompanyId) {
+        companyId = queryCompanyId;
+      } else if (req.user.username === 'sadmin' || req.user.isSuperAdmin) {
+        const platformId = await storage.getPlatformCompanyId();
+        companyId = platformId || req.user.companyId || req.user.id;
+      } else {
+        companyId = req.user.companyId || req.user.id;
+      }
       console.log(`Fetching wallet balances by type for user ${req.user.id} (company ${companyId}) - query param: ${queryCompanyId}`);
 
       const balancesByType = await storage.getCompanyWalletBalancesByType(companyId);
