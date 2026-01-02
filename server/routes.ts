@@ -5272,57 +5272,56 @@ export function registerRoutes(app: Express): Server {
         // Update the user's wallet balance with the credit amount
         await storage.addWalletBalance(wallet.id, creditAmount);
 
-        // For admin users (SimTree company), deduct fees from profit wallet
-        if (req.user.role === 'admin' || req.user.role === 'superadmin') {
-          try {
-            // Get SimTree company ID dynamically by looking it up by name
-            const simtreeCompanyId = await storage.getPlatformCompanyId();
-            if (!simtreeCompanyId) {
-              console.error("SimTree company not found for fee processing");
-              throw new Error("SimTree company not found");
-            }
-            
-            // Get profit wallet for SimTree
-            const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
+        // Record Stripe fees for ALL payments (not just admin users)
+        // Fees are deducted from SimTree's profit wallet and tracked in stripe_fees wallet
+        try {
+          // Get SimTree company ID dynamically by looking it up by name
+          const simtreeCompanyId = await storage.getPlatformCompanyId();
+          if (!simtreeCompanyId) {
+            console.error("SimTree company not found for fee processing");
+            throw new Error("SimTree company not found");
+          }
+          
+          // Get profit wallet for SimTree
+          const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
 
-            if (profitWallet) {
-              // Deduct all fees from profit wallet
-              const feeTransactionProfit = await storage.createTransaction({
-                type: 'debit',
+          if (profitWallet) {
+            // Deduct all fees from profit wallet
+            const feeTransactionProfit = await storage.createTransaction({
+              type: 'debit',
+              status: 'completed',
+              amount: stripeFee.toFixed(2),
+              paymentMethod: 'stripe',
+              description: `Stripe fees for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
+              walletId: profitWallet.id,
+              stripePaymentId: null,
+              stripeSessionId: null,
+              stripePaymentIntentId: paymentIntentId,
+              relatedTransactionId: transaction.id
+            });
+            await storage.addWalletBalance(profitWallet.id, -stripeFee);
+
+            // Also add fees to stripe_fees wallet for tracking
+            const stripeFeesWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'stripe_fees');
+            if (stripeFeesWallet) {
+              await storage.createTransaction({
+                type: 'credit',
                 status: 'completed',
                 amount: stripeFee.toFixed(2),
                 paymentMethod: 'stripe',
-                description: `Stripe fees for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
-                walletId: profitWallet.id,
+                description: `Stripe fees received for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
+                walletId: stripeFeesWallet.id,
                 stripePaymentId: null,
                 stripeSessionId: null,
                 stripePaymentIntentId: paymentIntentId,
-                relatedTransactionId: transaction.id
+                relatedTransactionId: feeTransactionProfit.id
               });
-              await storage.addWalletBalance(profitWallet.id, -stripeFee);
-
-              // Also add fees to stripe_fees wallet for tracking
-              const stripeFeesWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'stripe_fees');
-              if (stripeFeesWallet) {
-                await storage.createTransaction({
-                  type: 'credit',
-                  status: 'completed',
-                  amount: stripeFee.toFixed(2),
-                  paymentMethod: 'stripe',
-                  description: `Stripe fees received for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
-                  walletId: stripeFeesWallet.id,
-                  stripePaymentId: null,
-                  stripeSessionId: null,
-                  stripePaymentIntentId: paymentIntentId,
-                  relatedTransactionId: feeTransactionProfit.id
-                });
-                await storage.addWalletBalance(stripeFeesWallet.id, stripeFee);
-              }
+              await storage.addWalletBalance(stripeFeesWallet.id, stripeFee);
             }
-          } catch (feeError) {
-            console.error("Error handling Stripe fees:", feeError);
-            // Continue execution even if fee handling fails
           }
+        } catch (feeError) {
+          console.error("Error handling Stripe fees:", feeError);
+          // Continue execution even if fee handling fails
         }
       }
 
