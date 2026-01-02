@@ -1020,10 +1020,11 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       // Create appropriate wallet(s) based on company type
-      const simtreeCompanyId = 1;
+      // Check if this is a SimTree company by name (not hardcoded ID)
+      const isSimTreeCompany = newCompany.name.toLowerCase().includes('simtree');
       
-      if (newCompany.id === simtreeCompanyId) {
-        // SimTree should have three wallet types
+      if (isSimTreeCompany) {
+        // SimTree should have all wallet types (general, profit, provider, stripe_fees, tax)
         await this.createSimtreeWallets();
       } else {
         // Client companies should only have a general wallet
@@ -1048,16 +1049,20 @@ export class DatabaseStorage implements IStorage {
    * This handles different environments where the ID may vary
    */
   async getPlatformCompanyId(): Promise<number | null> {
-    // Look up company by name (case-insensitive)
+    // Look up company by name (case-insensitive, partial match for tolerance)
+    // Use LIKE with '%simtree%' to handle variations like "Simtree", "SimTree", etc.
     const simtreeCompany = await db
       .select()
       .from(schema.companies)
-      .where(sql`LOWER(name) = 'simtree'`)
+      .where(sql`LOWER(TRIM(name)) LIKE '%simtree%'`)
       .limit(1);
     
     if (simtreeCompany.length > 0) {
+      console.log(`[Storage] getPlatformCompanyId: Found SimTree company ID ${simtreeCompany[0].id} (name: "${simtreeCompany[0].name}")`);
       return simtreeCompany[0].id;
     }
+    
+    console.warn('[Storage] getPlatformCompanyId: No SimTree company found in database');
     return null;
   }
 
@@ -3057,12 +3062,17 @@ export class DatabaseStorage implements IStorage {
           .from(schema.employees)
           .leftJoin(schema.companies, eq(schema.employees.companyId, schema.companies.id));
 
+        // Find SimTree company dynamically by name for proper attribution
+        const allCompanies = await db.select().from(schema.companies);
+        const simtreeCompanyForEnrich = allCompanies.find(c => c.name.toLowerCase().includes('simtree'));
+        const simtreeCompanyIdForEnrich = simtreeCompanyForEnrich?.id;
+        
         // Map transactions with proper company name
         const enrichedTransactions = transactionsResult.map(transaction => {
           let companyName = 'Unknown';
           
-          // Special handling for SimTree (company ID 1)
-          if (companyId === 1) {
+          // Special handling for SimTree (use dynamic ID lookup)
+          if (simtreeCompanyIdForEnrich && companyId === simtreeCompanyIdForEnrich) {
             // For profit transactions, find the employee's company from the description
             if (transaction.description && transaction.description.includes('Profit:') && transaction.walletType === 'profit') {
               const employeeNameMatch = transaction.description.match(/for ([^+\-$]+?)(?:\s*[+\-$]|$)/);
@@ -3192,11 +3202,9 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(schema.wallets);
       
-      // As a safety net, find the SimTree company (should be ID 1)
-      // Try different case variations since name could be 'SimTree', 'Simtree', or 'SIMTREE'
+      // Find the SimTree company by name (case-insensitive) - don't use hardcoded IDs
       const simtreeCompany = companies.find(c => 
-        c.name.toLowerCase() === 'simtree' || 
-        c.id === 1  // The superadmin company should always be ID 1
+        c.name.toLowerCase().includes('simtree')
       );
       
       if (!simtreeCompany) {
@@ -3715,8 +3723,11 @@ export class DatabaseStorage implements IStorage {
           throw new Error(`Missing wallet for client company ${employee.companyId}`);
         }
         
-        // Get SimTree wallets (SimTree is company ID 1 - the platform owner)
-        const simtreeCompanyId = 1;
+        // Get SimTree wallets (use dynamic lookup - don't hardcode ID)
+        const simtreeCompanyId = await this.getPlatformCompanyId();
+        if (!simtreeCompanyId) {
+          throw new Error('SimTree company not found - cannot process refund');
+        }
         const simtreeGeneralWallet = await this.getWalletByType(simtreeCompanyId, 'general');
         const simtreeProfitWallet = await this.getWalletByType(simtreeCompanyId, 'profit');
         const simtreeProviderWallet = await this.getWalletByType(simtreeCompanyId, 'provider');
@@ -5075,8 +5086,12 @@ export class DatabaseStorage implements IStorage {
         return false;
       }
 
-      // SimTree company ID is always 1
-      const simtreeCompanyId = 1;
+      // Get SimTree company ID dynamically (don't hardcode)
+      const simtreeCompanyId = await this.getPlatformCompanyId();
+      if (!simtreeCompanyId) {
+        console.error("Cannot reverse profit: SimTree company not found");
+        return false;
+      }
       
       // Get the SimTree profit wallet specifically
       const simtreeProfitWallet = await this.getWalletByType(simtreeCompanyId, 'profit');
