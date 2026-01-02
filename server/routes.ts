@@ -4070,14 +4070,18 @@ export function registerRoutes(app: Express): Server {
 
       // If transactions already have companyName values from the database, we'll use those
       // The improved getAllWalletTransactions now provides better company attribution
+      
+      // Find SimTree company dynamically by name (handles different IDs across environments)
+      const simtreeCompany = companies.find(c => c.name.toLowerCase().includes('simtree'));
+      const simtreeCompanyId = simtreeCompany?.id;
+      
       const enrichedTransactions = await Promise.all(transactions.map(async transaction => {
-        // Special handling for SimTree transactions first
-        if (transaction.companyId === 1) {
-          const simtreeCompany = companies.find(c => c.id === 1);
+        // Special handling for SimTree transactions first (use dynamic ID lookup)
+        if (simtreeCompanyId && transaction.companyId === simtreeCompanyId) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
-            companyId: 1
+            companyId: simtreeCompanyId
           };
         }
         
@@ -4096,13 +4100,12 @@ export function registerRoutes(app: Express): Server {
         let company = null;
         let companyName = "Unknown";
         
-        // Special case for SimTree wallets (company ID 1)
-        if (wallet && wallet.companyId === 1) {
-          const simtreeCompany = companies.find(c => c.id === 1);
+        // Special case for SimTree wallets (use dynamic ID lookup)
+        if (wallet && simtreeCompanyId && wallet.companyId === simtreeCompanyId) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
-            companyId: 1
+            companyId: simtreeCompanyId
           };
         }
         
