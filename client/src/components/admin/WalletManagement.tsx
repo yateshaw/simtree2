@@ -452,7 +452,8 @@ export default function WalletManagement({ defaultTab = 'simtree' }: WalletManag
           {/* Multi-Wallet Display Component for SimTree */}
           <div className="mb-6">
             <h3 className="text-lg font-medium text-gray-800 mb-3">SimTree Multi-Wallet System</h3>
-            <MultiWalletDisplay companyId={1} /> {/* SimTree company ID is 1 */}
+            {/* Use dynamic SimTree company ID from simtreeWallets - DO NOT hardcode */}
+            <MultiWalletDisplay companyId={simtreeWallets[0]?.companyId} />
           </div>
 
           <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-all">
