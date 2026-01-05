@@ -1,5 +1,6 @@
-name: Production Database Backups  
+name: Production Database Backups
 # Force refresh 2026-01-05
+
 on:
   schedule:
     # Daily full backup at 06:00 UTC (03:00 AM Argentina)
@@ -65,6 +66,28 @@ jobs:
           else
             echo "type=hourly" >> $GITHUB_OUTPUT
           fi
+      - name: Debug secrets (TEMPORARY)
+        run: |
+          echo "=== DEBUG INFO ==="
+          echo "BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}"
+          echo "HOURLY_FOLDER_ID present: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY != '' }}"
+          echo "HOURLY_FOLDER_ID length: ${#GOOGLE_DRIVE_FOLDER_ID_HOURLY}"
+          if [ -n "$GOOGLE_DRIVE_FOLDER_ID_HOURLY" ]; then
+            echo "HOURLY_FOLDER_ID first 10 chars: ${GOOGLE_DRIVE_FOLDER_ID_HOURLY:0:10}..."
+          else
+            echo "HOURLY_FOLDER_ID is EMPTY or UNSET"
+          fi
+          echo "DAILY_FOLDER_ID length: ${#GOOGLE_DRIVE_FOLDER_ID_DAILY}"
+          if [ -n "$GOOGLE_DRIVE_FOLDER_ID_DAILY" ]; then
+            echo "DAILY_FOLDER_ID first 10 chars: ${GOOGLE_DRIVE_FOLDER_ID_DAILY:0:10}..."
+          else
+            echo "DAILY_FOLDER_ID is EMPTY or UNSET"
+          fi
+          echo "==================="
+        env:
+          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
+          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
+
       - name: Create backup script
         run: |
           cat > backup.mjs << 'SCRIPT_EOF'
