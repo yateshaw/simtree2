@@ -49,6 +49,7 @@ jobs:
           # Add PostgreSQL 17 to PATH (priority over default version)
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
           /usr/lib/postgresql/17/bin/pg_dump --version
+          
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail google-auth-library
 
@@ -66,29 +67,18 @@ jobs:
           else
             echo "type=hourly" >> $GITHUB_OUTPUT
           fi
-      - name: Debug secrets (TEMPORARY)
-        run: |
-          echo "=== DEBUG INFO ==="
-          echo "BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}"
-          echo "HOURLY_FOLDER_ID present: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY != '' }}"
-          echo "HOURLY_FOLDER_ID length: ${#GOOGLE_DRIVE_FOLDER_ID_HOURLY}"
-          if [ -n "$GOOGLE_DRIVE_FOLDER_ID_HOURLY" ]; then
-            echo "HOURLY_FOLDER_ID first 10 chars: ${GOOGLE_DRIVE_FOLDER_ID_HOURLY:0:10}..."
-          else
-            echo "HOURLY_FOLDER_ID is EMPTY or UNSET"
-          fi
-          echo "DAILY_FOLDER_ID length: ${#GOOGLE_DRIVE_FOLDER_ID_DAILY}"
-          if [ -n "$GOOGLE_DRIVE_FOLDER_ID_DAILY" ]; then
-            echo "DAILY_FOLDER_ID first 10 chars: ${GOOGLE_DRIVE_FOLDER_ID_DAILY:0:10}..."
-          else
-            echo "DAILY_FOLDER_ID is EMPTY or UNSET"
-          fi
-          echo "==================="
-        env:
-          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
-          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
 
-      - name: Create backup script
+      - name: Create and run backup script
+        env:
+          BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
+          GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
+          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
         run: |
           cat > backup.mjs << 'SCRIPT_EOF'
           import { google } from 'googleapis';
@@ -97,15 +87,6 @@ jobs:
           import { promisify } from 'util';
           const execAsync = promisify(exec);
           
-          // DEBUG: Check env vars at the very beginning
-          console.log('=== NODE.JS DEBUG ===');
-          console.log('BACKUP_TYPE:', process.env.BACKUP_TYPE);
-          console.log('HOURLY_FOLDER_ID:', process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY);
-          console.log('HOURLY_FOLDER_ID length:', process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY ? process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY.length : 'undefined');
-          console.log('DAILY_FOLDER_ID:', process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY);
-          console.log('DAILY_FOLDER_ID length:', process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY ? process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY.length : 'undefined');
-          console.log('=====================');
-          
           function sanitizeError(error) {
             let msg = error.message || String(error);
             msg = msg.replace(/postgresql:\/\/[^@]+@/gi, 'postgresql://***:***@');
@@ -113,6 +94,7 @@ jobs:
             msg = msg.replace(/password[=:][^\s&"']+/gi, 'password=***');
             return msg;
           }
+          
           const BACKUP_TYPE = process.env.BACKUP_TYPE || 'daily';
           const DATABASE_URL = process.env.DATABASE_URL;
           const GOOGLE_CREDENTIALS = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -122,14 +104,17 @@ jobs:
           const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
           const NOTIFICATION_EMAIL = process.env.BACKUP_NOTIFICATION_EMAIL || 'yateshaw@gmail.com';
           const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'hey@simtree.co';
+          
           // Critical tables for hourly backup
           const CRITICAL_TABLES = ['wallets', 'wallet_transactions', 'purchased_esims'];
+          
           // Retention limits
           const RETENTION = {
             daily: 30,    // 1 month
             monthly: 12,  // 1 year
             hourly: 48    // 2 days
           };
+          
           async function sendEmail(subject, body) {
             if (!SENDGRID_API_KEY) {
               console.log('SendGrid not configured, skipping email');
@@ -160,6 +145,7 @@ jobs:
               console.error('Email error:', error.message);
             }
           }
+          
           function getAuth() {
             const credentials = JSON.parse(GOOGLE_CREDENTIALS);
             return new google.auth.GoogleAuth({
@@ -167,6 +153,7 @@ jobs:
               scopes: ['https://www.googleapis.com/auth/drive.file']
             });
           }
+          
           async function validateFolder(folderId) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -184,6 +171,7 @@ jobs:
               throw new Error(`Invalid folder ID '${folderId}': ${errMsg}. Check GOOGLE_DRIVE_FOLDER_ID_* secrets in GitHub.`);
             }
           }
+          
           async function uploadToGoogleDrive(filePath, fileName, folderId) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -218,6 +206,7 @@ jobs:
               throw err;
             }
           }
+          
           async function manageRetention(folderId, maxFiles) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -278,6 +267,7 @@ jobs:
               throw listErr;
             }
           }
+          
           async function getBackupStats() {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -318,6 +308,7 @@ jobs:
             
             return stats;
           }
+          
           async function sendWeeklySummary() {
             console.log('Generating weekly backup summary...');
             
@@ -382,6 +373,7 @@ jobs:
             console.log('✅ Weekly summary sent');
             return { success: true, type: 'weekly-summary' };
           }
+          
           async function runBackupWithRetry(maxAttempts = 3) {
             let lastError;
             
@@ -403,6 +395,7 @@ jobs:
             
             throw lastError;
           }
+          
           async function runBackup() {
             console.log(`Starting ${BACKUP_TYPE} backup...`);
             
@@ -498,6 +491,7 @@ jobs:
             console.log('✅ Backup completed successfully');
             return { success: true, fileName, size: stats.size, driveFileId: uploadResult.id };
           }
+          
           async function main() {
             try {
               if (BACKUP_TYPE === 'weekly-summary') {
@@ -532,17 +526,8 @@ jobs:
               process.exit(1);
             }
           }
+          
           main();
           SCRIPT_EOF
-      - name: Run backup
-        env:
-          BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
-          GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
-          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
-          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
-          BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
-        run: node backup.mjs
+          
+          node backup.mjs
