@@ -73,9 +73,6 @@ jobs:
           BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
-          GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
-          GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
           BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
@@ -98,9 +95,12 @@ jobs:
           const BACKUP_TYPE = process.env.BACKUP_TYPE || 'daily';
           const DATABASE_URL = process.env.DATABASE_URL;
           const GOOGLE_CREDENTIALS = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-          const DAILY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY;
-          const MONTHLY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_MONTHLY;
-          const HOURLY_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY;
+          
+          // TEMPORARY HARDCODED - Google Drive folder IDs (these are not secrets)
+          const DAILY_FOLDER_ID = '1MGgU3_IlZUmlBCB2bf7DWdSSp-304nrT';
+          const MONTHLY_FOLDER_ID = '1EjGC5dRoGHquDz8DJ0KGfPMrWyv6HtRS';
+          const HOURLY_FOLDER_ID = '1RiEv6y06PDeGVP1gFVEz6uc6m2n6fSqU';
+          
           const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
           const NOTIFICATION_EMAIL = process.env.BACKUP_NOTIFICATION_EMAIL || 'yateshaw@gmail.com';
           const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'hey@simtree.co';
