@@ -48,7 +48,6 @@ jobs:
           # Add PostgreSQL 17 to PATH (priority over default version)
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
           /usr/lib/postgresql/17/bin/pg_dump --version
-
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail google-auth-library
 
@@ -66,7 +65,6 @@ jobs:
           else
             echo "type=hourly" >> $GITHUB_OUTPUT
           fi
-
       - name: Create backup script
         run: |
           cat > backup.mjs << 'SCRIPT_EOF'
@@ -74,9 +72,7 @@ jobs:
           import { exec } from 'child_process';
           import { createReadStream, statSync, unlinkSync } from 'fs';
           import { promisify } from 'util';
-
           const execAsync = promisify(exec);
-
           function sanitizeError(error) {
             let msg = error.message || String(error);
             msg = msg.replace(/postgresql:\/\/[^@]+@/gi, 'postgresql://***:***@');
@@ -84,7 +80,6 @@ jobs:
             msg = msg.replace(/password[=:][^\s&"']+/gi, 'password=***');
             return msg;
           }
-
           const BACKUP_TYPE = process.env.BACKUP_TYPE || 'daily';
           const DATABASE_URL = process.env.DATABASE_URL;
           const GOOGLE_CREDENTIALS = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -94,17 +89,14 @@ jobs:
           const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
           const NOTIFICATION_EMAIL = process.env.BACKUP_NOTIFICATION_EMAIL || 'yateshaw@gmail.com';
           const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'hey@simtree.co';
-
           // Critical tables for hourly backup
           const CRITICAL_TABLES = ['wallets', 'wallet_transactions', 'purchased_esims'];
-
           // Retention limits
           const RETENTION = {
             daily: 30,    // 1 month
             monthly: 12,  // 1 year
             hourly: 48    // 2 days
           };
-
           async function sendEmail(subject, body) {
             if (!SENDGRID_API_KEY) {
               console.log('SendGrid not configured, skipping email');
@@ -135,7 +127,6 @@ jobs:
               console.error('Email error:', error.message);
             }
           }
-
           function getAuth() {
             const credentials = JSON.parse(GOOGLE_CREDENTIALS);
             return new google.auth.GoogleAuth({
@@ -143,7 +134,6 @@ jobs:
               scopes: ['https://www.googleapis.com/auth/drive.file']
             });
           }
-
           async function validateFolder(folderId) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -161,7 +151,6 @@ jobs:
               throw new Error(`Invalid folder ID '${folderId}': ${errMsg}. Check GOOGLE_DRIVE_FOLDER_ID_* secrets in GitHub.`);
             }
           }
-
           async function uploadToGoogleDrive(filePath, fileName, folderId) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -196,7 +185,6 @@ jobs:
               throw err;
             }
           }
-
           async function manageRetention(folderId, maxFiles) {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -204,8 +192,8 @@ jobs:
             try {
               const listResponse = await drive.files.list({
                 q: `'${folderId}' in parents and trashed=false`,
-                fields: 'files(id, name, createdTime)',
-                orderBy: 'createdTime desc',
+                fields: 'files(id, name, createdTime, size)',
+                orderBy: 'createdTime asc',
                 supportsAllDrives: true,
                 includeItemsFromAllDrives: true
               });
@@ -214,31 +202,49 @@ jobs:
               console.log(`Found ${files.length} backups in folder (max: ${maxFiles})`);
               
               if (files.length > maxFiles) {
-                const toDelete = files.slice(maxFiles);
+                const toDelete = files.slice(0, files.length - maxFiles);
                 console.log(`Deleting ${toDelete.length} old backups...`);
+                console.log(`Files to delete:`, toDelete.map(f => `${f.name} (${f.size} bytes)`).join(', '));
+                
+                let deletedCount = 0;
+                let failedCount = 0;
                 
                 for (const file of toDelete) {
                   try {
-                    await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
-                    console.log(`Deleted: ${file.name}`);
+                    await drive.files.delete({ 
+                      fileId: file.id, 
+                      supportsAllDrives: true 
+                    });
+                    console.log(`✅ Deleted: ${file.name} (${file.size} bytes)`);
+                    deletedCount++;
                   } catch (err) {
                     const errCode = err.code || err.status || err.response?.status;
                     const errMsg = err.message || String(err);
+                    
                     if (errCode == 404 || errCode === '404' || 
-                        errMsg.includes('not found') || errMsg.includes('File not found') ||
-                        errMsg.includes(file.id)) {
-                      console.log(`Already deleted or not found: ${file.name}`);
+                        errMsg.includes('not found') || errMsg.includes('File not found')) {
+                      console.log(`⚠️ Already deleted: ${file.name}`);
+                      deletedCount++;
                     } else {
-                      console.warn(`Failed to delete ${file.name}: ${errMsg}`);
+                      console.error(`❌ FAILED to delete ${file.name}: [${errCode}] ${errMsg}`);
+                      failedCount++;
                     }
                   }
                 }
+                
+                console.log(`Retention cleanup: ${deletedCount} deleted, ${failedCount} failed`);
+                
+                if (failedCount > 0) {
+                  throw new Error(`Failed to delete ${failedCount} old backups. Check service account permissions.`);
+                }
+              } else {
+                console.log(`No cleanup needed (${files.length} <= ${maxFiles})`);
               }
             } catch (listErr) {
               console.warn(`Retention cleanup skipped: ${listErr.message}`);
+              throw listErr;
             }
           }
-
           async function getBackupStats() {
             const auth = getAuth();
             const drive = google.drive({ version: 'v3', auth });
@@ -279,7 +285,6 @@ jobs:
             
             return stats;
           }
-
           async function sendWeeklySummary() {
             console.log('Generating weekly backup summary...');
             
@@ -344,7 +349,6 @@ jobs:
             console.log('✅ Weekly summary sent');
             return { success: true, type: 'weekly-summary' };
           }
-
           async function runBackupWithRetry(maxAttempts = 3) {
             let lastError;
             
@@ -366,7 +370,6 @@ jobs:
             
             throw lastError;
           }
-
           async function runBackup() {
             console.log(`Starting ${BACKUP_TYPE} backup...`);
             
@@ -462,7 +465,6 @@ jobs:
             console.log('✅ Backup completed successfully');
             return { success: true, fileName, size: stats.size, driveFileId: uploadResult.id };
           }
-
           async function main() {
             try {
               if (BACKUP_TYPE === 'weekly-summary') {
@@ -497,10 +499,8 @@ jobs:
               process.exit(1);
             }
           }
-
           main();
           SCRIPT_EOF
-
       - name: Run backup
         env:
           BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
