@@ -171,19 +171,22 @@ export function EsimCancelDialog({
       if (response.success) {
         if (import.meta.env.DEV) { console.log(`Refreshing data after cancellation for employee ${employeeId}`); }
         
-        // Close dialog first to prevent flash during data refresh
+        // Dispatch planCancelled event IMMEDIATELY to update UI state before any refetches
+        // This ensures the employee shows "No Plan" right away via cancelledEmployeeIds
+        window.dispatchEvent(new CustomEvent('planCancelled', { detail: { employeeId } }));
+        
+        // Close dialog after dispatching event
         onClose();
         
-        // Invalidate critical queries - do this in background after dialog closes
+        // Invalidate critical queries - use correct query keys
         await queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
-        await queryClient.invalidateQueries({ queryKey: ['/esim/purchased'] });
-        await queryClient.invalidateQueries({ queryKey: ['/wallet'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/esim/purchased'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/wallet/transactions'] });
         
-        // Dispatch event after a short delay to notify UI to refresh
+        // Dispatch refreshEmployees after a short delay for any additional cleanup
         setTimeout(() => {
           window.dispatchEvent(new Event('refreshEmployees'));
-          window.dispatchEvent(new CustomEvent('planCancelled', { detail: { employeeId } }));
         }, 300);
 
         toast({

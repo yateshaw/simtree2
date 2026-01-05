@@ -769,8 +769,8 @@ export default function EmployeeTable({
   // Helper function to force refresh when cancelled eSIMs are detected
   const forceDataRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/purchased-esims'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/plans'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/esim/purchased'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/esim/plans'] });
   }, [queryClient]);
 
   // Helper to get the most recent eSIM for an employee is now imported from employeeUtils.ts
