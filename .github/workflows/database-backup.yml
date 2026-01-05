@@ -96,6 +96,16 @@ jobs:
           import { createReadStream, statSync, unlinkSync } from 'fs';
           import { promisify } from 'util';
           const execAsync = promisify(exec);
+          
+          // DEBUG: Check env vars at the very beginning
+          console.log('=== NODE.JS DEBUG ===');
+          console.log('BACKUP_TYPE:', process.env.BACKUP_TYPE);
+          console.log('HOURLY_FOLDER_ID:', process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY);
+          console.log('HOURLY_FOLDER_ID length:', process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY ? process.env.GOOGLE_DRIVE_FOLDER_ID_HOURLY.length : 'undefined');
+          console.log('DAILY_FOLDER_ID:', process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY);
+          console.log('DAILY_FOLDER_ID length:', process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY ? process.env.GOOGLE_DRIVE_FOLDER_ID_DAILY.length : 'undefined');
+          console.log('=====================');
+          
           function sanitizeError(error) {
             let msg = error.message || String(error);
             msg = msg.replace(/postgresql:\/\/[^@]+@/gi, 'postgresql://***:***@');
