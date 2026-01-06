@@ -4077,7 +4077,9 @@ export function registerRoutes(app: Express): Server {
       
       const enrichedTransactions = await Promise.all(transactions.map(async transaction => {
         // Special handling for SimTree transactions first (use dynamic ID lookup)
-        if (simtreeCompanyId && transaction.companyId === simtreeCompanyId) {
+        // BUT skip this for VAT transactions - they need to show the client company
+        const isVatTransaction = transaction.description?.includes('VAT (5%):');
+        if (simtreeCompanyId && transaction.companyId === simtreeCompanyId && !isVatTransaction) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
@@ -4101,7 +4103,8 @@ export function registerRoutes(app: Express): Server {
         let companyName = "Unknown";
         
         // Special case for SimTree wallets (use dynamic ID lookup)
-        if (wallet && simtreeCompanyId && wallet.companyId === simtreeCompanyId) {
+        // Skip this for VAT transactions - they need to show the client company
+        if (wallet && simtreeCompanyId && wallet.companyId === simtreeCompanyId && !isVatTransaction) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
