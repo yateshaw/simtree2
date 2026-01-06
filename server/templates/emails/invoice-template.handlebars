@@ -127,8 +127,8 @@
     .company-details {
       display: flex;
       justify-content: space-between;
-      margin-top: 60px;
-      padding-top: 30px;
+      margin-top: 30px;
+      padding-top: 20px;
       border-top: 1px solid #e5e7eb;
       font-size: 14px;
       color: #6b7280;
@@ -188,12 +188,7 @@
       <tbody>
         {{#each items}}
         <tr>
-          <td>
-            <strong>{{planName}}</strong>
-            {{#if dataAmount}}
-            <br><small style="color: #6b7280;">{{dataAmount}}{{#if validity}} • {{validity}}{{/if}}</small>
-            {{/if}}
-          </td>
+          <td><strong>{{planName}}</strong></td>
           <td class="qty-col">{{quantity}}</td>
           <td class="price-col">${{unitPrice}}</td>
           <td class="price-col">${{totalAmount}}</td>
