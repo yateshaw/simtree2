@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import { db } from '../server/db';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import ws from 'ws';
 import * as schema from '../shared/schema';
 import { eq } from 'drizzle-orm';
 import { Readable } from 'stream';
@@ -8,6 +10,19 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import handlebars from 'handlebars';
 import puppeteer from 'puppeteer';
+
+// Use production database for archiving
+const PROD_DATABASE_URL = process.env.PROD_DATABASE_URL;
+if (!PROD_DATABASE_URL) {
+  console.error('ERROR: PROD_DATABASE_URL environment variable is required');
+  console.error('Set it to your production database connection string');
+  process.exit(1);
+}
+
+console.log('[Archive] Connecting to PRODUCTION database...');
+neonConfig.webSocketConstructor = ws;
+const pool = new Pool({ connectionString: PROD_DATABASE_URL });
+const db = drizzle(pool, { schema });
 
 const RECEIPTS_FOLDER_ID = process.env.RECEIPTS_DRIVE_FOLDER_ID;
 const INVOICES_FOLDER_ID = process.env.INVOICES_DRIVE_FOLDER_ID;
