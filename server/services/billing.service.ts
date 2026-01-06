@@ -302,11 +302,11 @@ export class BillingService {
         .values(billData)
         .returning();
 
-      // Create bill items (separate eSIM and VAT items for UAE companies)
+      // Create bill items (only eSIM items - VAT is calculated at display time, not stored as separate items)
       const billItems: InsertBillItem[] = [];
       
       Array.from(groupedPurchases.entries()).forEach(([key, group]) => {
-        // Add eSIM plan item
+        // Add eSIM plan item (VAT will be calculated when generating the invoice PDF)
         billItems.push({
           billId: bill.id,
           esimPlanId: group.plan.id,
@@ -319,23 +319,6 @@ export class BillingService {
           dataAmount: group.plan.data,
           validity: group.plan.validity
         });
-        
-        // Add VAT item for UAE companies
-        if (isUAECompany && group.vatAmount && group.vatAmount > 0) {
-          billItems.push({
-            billId: bill.id,
-            planName: `VAT (5%) - ${group.plan.name}`,
-            planDescription: '5% Value Added Tax',
-            unitPrice: (group.vatAmount / group.quantity).toFixed(2),
-            quantity: group.quantity,
-            totalAmount: group.vatAmount.toString(),
-            itemType: 'custom' as const,
-            customDescription: `5% VAT on ${group.plan.name}`,
-            countries: [],
-            dataAmount: null,
-            validity: null
-          });
-        }
       });
 
       await db

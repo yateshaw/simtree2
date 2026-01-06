@@ -369,43 +369,50 @@ export async function generateInvoiceHTML(
   billItems: any[],
   embedLogo: boolean = true
 ): Promise<string> {
-  // Separate eSIM items from VAT items
+  // Determine if UAE company for VAT calculation (5% VAT applies to UAE companies)
+  const isUAECompany = company?.country === 'UAE' || company?.country === 'United Arab Emirates';
+  const vatRate = 0.05; // 5% VAT
+  
+  // Filter out old VAT line items (legacy data) - we now calculate VAT per item
   const esimItems = billItems.filter(item => 
     !item.planName?.includes('VAT (5%)') && 
     !item.customDescription?.includes('5% VAT')
   );
   
-  const vatItems = billItems.filter(item => 
-    item.planName?.includes('VAT (5%)') || 
-    item.customDescription?.includes('5% VAT')
-  );
-  
-  // Calculate totals
+  // Calculate subtotal from eSIM items only
   const subtotal = esimItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
-  const vatTotal = vatItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
-  const isUAECompany = vatTotal > 0;
+  
+  // Calculate VAT total for UAE companies
+  const vatTotal = isUAECompany ? subtotal * vatRate : 0;
+  const grandTotal = subtotal + vatTotal;
   
   console.log(`[Email] Invoice VAT calculation:`, {
     esimItems: esimItems.length,
-    vatItems: vatItems.length,
     subtotal: subtotal.toFixed(2),
     vatTotal: vatTotal.toFixed(2),
+    grandTotal: grandTotal.toFixed(2),
     isUAECompany
   });
   
-  // Format bill items for template (show all items)
-  const formattedItems = billItems.map(item => ({
-    planName: item.planName,
-    planDescription: item.planDescription || '',
-    customDescription: item.customDescription || '',
-    countries: Array.isArray(item.countries) ? item.countries.join(', ') : '',
-    dataAmount: item.dataAmount ? parseFloat(item.dataAmount).toFixed(1) + ' GB' : '',
-    validity: item.validity ? item.validity + ' days' : '',
-    quantity: item.quantity,
-    unitPrice: parseFloat(item.unitPrice).toFixed(2),
-    totalAmount: parseFloat(item.totalAmount).toFixed(2),
-    isVATItem: item.planName?.includes('VAT (5%)') || item.customDescription?.includes('5% VAT')
-  }));
+  // Format bill items for template with VAT calculated per item
+  const formattedItems = esimItems.map(item => {
+    const itemTotal = parseFloat(item.totalAmount);
+    const itemVat = isUAECompany ? itemTotal * vatRate : 0;
+    
+    return {
+      planName: item.planName,
+      planDescription: item.planDescription || '',
+      customDescription: item.customDescription || '',
+      countries: Array.isArray(item.countries) ? item.countries.join(', ') : '',
+      dataAmount: item.dataAmount ? parseFloat(item.dataAmount).toFixed(1) + ' GB' : '',
+      validity: item.validity ? item.validity + ' days' : '',
+      quantity: item.quantity,
+      unitPrice: parseFloat(item.unitPrice).toFixed(2),
+      totalAmount: itemTotal.toFixed(2),
+      vatAmount: itemVat.toFixed(2),
+      vatPercentage: isUAECompany ? '5%' : '0%'
+    };
+  });
 
   // Calculate due date (30 days from billing date)
   const billingDate = new Date(bill.billingDate);
@@ -421,10 +428,10 @@ export async function generateInvoiceHTML(
     dueDate: dueDate.toLocaleDateString(),
     subtotalAmount: subtotal.toFixed(2),
     vatAmount: vatTotal.toFixed(2),
-    totalAmount: parseFloat(bill.totalAmount).toFixed(2),
+    totalAmount: grandTotal.toFixed(2),
     currency: bill.currency || 'USD',
     items: formattedItems,
-    itemCount: billItems.length,
+    itemCount: formattedItems.length,
     hasVAT: isUAECompany,
     year: new Date().getFullYear()
   };

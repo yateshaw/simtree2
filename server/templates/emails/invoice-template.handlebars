@@ -203,17 +203,7 @@
           <td class="qty-col">{{quantity}}</td>
           <td class="price-col">${{unitPrice}}</td>
           <td class="price-col">${{totalAmount}}</td>
-          <td class="price-col">
-            {{#if isVATItem}}
-              ${{totalAmount}} (5%)
-            {{else}}
-              {{#if ../hasVAT}}
-                $0.00 (0%)
-              {{else}}
-                $0.00 (0%)
-              {{/if}}
-            {{/if}}
-          </td>
+          <td class="price-col">${{vatAmount}} ({{vatPercentage}})</td>
         </tr>
         {{/each}}
       </tbody>
