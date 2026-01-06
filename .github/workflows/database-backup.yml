@@ -64,7 +64,6 @@ jobs:
           } = process.env;
 
           const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
-
           sgMail.setApiKey(SENDGRID_API_KEY);
 
           const auth = new google.auth.GoogleAuth({
@@ -73,59 +72,78 @@ jobs:
           });
           const drive = google.drive({ version: 'v3', auth });
 
-          async function sendSummary(content) {
-            console.log(">>> Enviando Reporte Semanal por Email...");
-            const msg = {
+          async function sendStyledSummary(data) {
+            const htmlContent = `
+            <div style="background-color: #1a1a1a; color: #ffffff; padding: 20px; font-family: sans-serif; border-radius: 8px; max-width: 800px;">
+              <h2 style="color: #4caf50; display: flex; align-items: center;">
+                <span style="margin-right: 10px;">📊</span> SimTree Weekly Backup Summary
+              </h2>
+              <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #e0e0e0;">
+                <thead>
+                  <tr style="background-color: #333333; text-align: left;">
+                    <th style="padding: 12px; border: 1px solid #444;">Type</th>
+                    <th style="padding: 12px; border: 1px solid #444;">Total Backups</th>
+                    <th style="padding: 12px; border: 1px solid #444;">Storage Used</th>
+                    <th style="padding: 12px; border: 1px solid #444;">Retention Policy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.map(row => `
+                    <tr>
+                      <td style="padding: 12px; border: 1px solid #444;">${row.type}</td>
+                      <td style="padding: 12px; border: 1px solid #444;">${row.count}</td>
+                      <td style="padding: 12px; border: 1px solid #444;">${row.size}</td>
+                      <td style="padding: 12px; border: 1px solid #444;">${row.policy}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              <p style="margin-top: 25px; font-weight: bold;">System status: ✅ Operational</p>
+            </div>`;
+
+            await sgMail.send({
               to: NOTIFICATION_EMAIL,
               from: FROM_EMAIL,
-              subject: `Simtree DB: Weekly Backup Summary`,
-              text: content,
-              html: `<pre style="font-family: monospace;">${content}</pre>`
-            };
-            await sgMail.send(msg);
-            console.log(">>> Email enviado exitosamente.");
+              subject: `SimTree Weekly Backup Summary`,
+              html: htmlContent
+            });
           }
 
           async function run() {
-            // Si es un resumen semanal, no hacemos dump, solo listamos y enviamos mail
             if (BACKUP_TYPE === 'weekly-summary') {
-              let report = "RESUMEN SEMANAL DE BACKUPS EN DRIVE\n";
-              report += "====================================\n\n";
-              
+              const summaryData = [];
               const folders = [
-                { name: 'HOURLY', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY },
-                { name: 'DAILY', id: GOOGLE_DRIVE_FOLDER_ID_DAILY },
-                { name: 'MONTHLY', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY }
+                { type: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, policy: '30 backups' },
+                { type: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, policy: '12 backups' },
+                { type: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY, policy: '48 backups' }
               ];
 
               for (const f of folders) {
                 const res = await drive.files.list({
                   q: `'${f.id}' in parents and trashed=false`,
-                  fields: 'files(name, size, createdTime)',
-                  orderBy: 'createdTime desc',
+                  fields: 'files(size)',
                   supportsAllDrives: true,
                   includeItemsFromAllDrives: true
                 });
                 const files = res.data.files || [];
-                report += `📁 ${f.name}:\n`;
-                report += `- Total archivos: ${files.length}\n`;
-                if (files.length > 0) {
-                  report += `- Último: ${files[0].name} (${(files[0].size / 1024 / 1024).toFixed(2)} MB)\n`;
-                  report += `- Fecha: ${files[0].createdTime}\n`;
-                }
-                report += "\n";
+                const totalBytes = files.reduce((acc, file) => acc + parseInt(file.size || 0), 0);
+                
+                summaryData.push({
+                  type: f.type,
+                  count: files.length,
+                  size: `${(totalBytes / 1024 / 1024).toFixed(2)} MB`,
+                  policy: f.policy
+                });
               }
-              
-              await sendSummary(report);
+              await sendStyledSummary(summaryData);
               return;
             }
 
-            // --- Lógica Normal de Backup ---
+            // --- Lógica de Backup y Limpieza ---
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
-            console.log(`>>> Iniciando Backup: ${BACKUP_TYPE}`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
@@ -136,54 +154,26 @@ jobs:
               supportsAllDrives: true 
             });
 
-            console.log(">>> Iniciando limpieza profunda...");
             let continueCleaning = true;
-            let totalDeleted = 0;
-
             while (continueCleaning) {
               const listRes = await drive.files.list({ 
                 q: `'${folderId}' in parents and trashed=false`, 
-                orderBy: 'createdTime asc', 
-                pageSize: 100, 
-                fields: 'files(id, name)', 
-                supportsAllDrives: true, 
-                includeItemsFromAllDrives: true 
+                orderBy: 'createdTime asc', pageSize: 100, 
+                fields: 'files(id)', supportsAllDrives: true, includeItemsFromAllDrives: true 
               });
-
               let files = listRes.data.files || [];
               const limit = RETENTION[BACKUP_TYPE];
-
               if (files.length > limit) {
                 const toDelete = files.slice(0, files.length - limit);
-                console.log(`>>> Detectados ${files.length} archivos. Moviendo a papelera ${toDelete.length}...`);
-                
                 for (const file of toDelete) {
-                  try {
-                    await drive.files.update({ 
-                      fileId: file.id, 
-                      requestBody: { trashed: true },
-                      supportsAllDrives: true 
-                    });
-                    totalDeleted++;
-                  } catch (e) {
-                    if (e.code === 404) continue;
-                    console.error(`>>> Error en ${file.name}: ${e.message}`);
-                  }
+                  await drive.files.update({ fileId: file.id, requestBody: { trashed: true }, supportsAllDrives: true });
                 }
                 await new Promise(r => setTimeout(r, 2000));
-              } else {
-                continueCleaning = false;
-              }
+              } else { continueCleaning = false; }
             }
-
-            console.log(`>>> Limpieza finalizada. Quedan ${(limit || 'N/A')} archivos.`);
             if (existsSync(filePath)) unlinkSync(filePath);
-            console.log(">>> ✅ Proceso terminado.");
           }
 
-          run().catch(e => { 
-            console.error(">>> ERROR CRÍTICO:", e);
-            process.exit(1); 
-          });
+          run().catch(e => { console.error(e); process.exit(1); });
           EOF
           node backup.mjs
