@@ -42,37 +42,69 @@ export async function compileTemplate(templateName: string, data: any): Promise<
   }
 }
 
+// Helper to find Chrome/Chromium executable dynamically
+async function findChromiumPath(): Promise<string | undefined> {
+  const { execSync } = await import('child_process');
+  const fsModule = await import('fs');
+  
+  // First try to use `which chromium` command
+  try {
+    const chromiumPath = execSync('which chromium', { encoding: 'utf8' }).trim();
+    if (chromiumPath && fsModule.existsSync(chromiumPath)) {
+      console.log(`[PDF] Found Chromium via 'which': ${chromiumPath}`);
+      return chromiumPath;
+    }
+  } catch (e) {
+    // which chromium failed, try other methods
+  }
+  
+  // Try to use `which chromium-browser` command
+  try {
+    const chromiumPath = execSync('which chromium-browser', { encoding: 'utf8' }).trim();
+    if (chromiumPath && fsModule.existsSync(chromiumPath)) {
+      console.log(`[PDF] Found Chromium via 'which chromium-browser': ${chromiumPath}`);
+      return chromiumPath;
+    }
+  } catch (e) {
+    // which chromium-browser failed, try other methods
+  }
+  
+  // Check known paths
+  const knownPaths = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/home/runner/.cache/puppeteer/chrome/linux-140.0.7339.80/chrome-linux64/chrome',
+    puppeteer.executablePath(),
+  ].filter(Boolean);
+  
+  for (const chromePath of knownPaths) {
+    if (chromePath && fsModule.existsSync(chromePath)) {
+      console.log(`[PDF] Found Chrome at known path: ${chromePath}`);
+      return chromePath;
+    }
+  }
+  
+  // Search in Nix store as a fallback
+  try {
+    const nixPath = execSync('find /nix/store -name "chromium" -type f -executable 2>/dev/null | head -1', { encoding: 'utf8' }).trim();
+    if (nixPath && fsModule.existsSync(nixPath)) {
+      console.log(`[PDF] Found Chromium in Nix store: ${nixPath}`);
+      return nixPath;
+    }
+  } catch (e) {
+    // Nix search failed
+  }
+  
+  return undefined;
+}
+
 // Helper to convert HTML to PDF using Puppeteer
 export async function convertHtmlToPdf(html: string): Promise<Buffer> {
   let browser = null;
   try {
     console.log('[PDF] Launching Puppeteer browser for PDF generation');
     
-    // Try to find Chrome executable - works in both dev and production
-    let executablePath: string | undefined;
-    
-    // Check common Chrome locations
-    const chromePaths = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium',
-      '/home/runner/.cache/puppeteer/chrome/linux-140.0.7339.80/chrome-linux64/chrome',
-      puppeteer.executablePath(),
-    ].filter(Boolean);
-    
-    for (const chromePath of chromePaths) {
-      if (chromePath) {
-        try {
-          const fs = await import('fs');
-          if (fs.existsSync(chromePath)) {
-            executablePath = chromePath;
-            console.log(`[PDF] Found Chrome at: ${chromePath}`);
-            break;
-          }
-        } catch (e) {
-          // Path doesn't exist, try next
-        }
-      }
-    }
+    // Find Chrome executable dynamically
+    const executablePath = await findChromiumPath();
     
     if (!executablePath) {
       console.log('[PDF] No Chrome path found, letting Puppeteer detect automatically');
