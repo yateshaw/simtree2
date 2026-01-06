@@ -251,29 +251,36 @@ async function archiveInvoices() {
         .from(schema.billItems)
         .where(eq(schema.billItems.billId, bill.id));
 
+      // Filter out any legacy VAT line items
       const esimItems = billItems.filter(item => 
         !item.planName?.includes('VAT (5%)') && 
         !item.customDescription?.includes('5% VAT')
       );
       
-      const vatItems = billItems.filter(item => 
-        item.planName?.includes('VAT (5%)') || 
-        item.customDescription?.includes('5% VAT')
-      );
+      // Determine VAT based on company country (5% VAT for UAE companies)
+      const isUAECompany = company?.country === 'UAE' || company?.country === 'United Arab Emirates';
+      const vatRate = 0.05;
       
       const subtotal = esimItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
-      const vatTotal = vatItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
-      const isUAECompany = vatTotal > 0;
+      const vatTotal = isUAECompany ? subtotal * vatRate : 0;
+      const grandTotal = subtotal + vatTotal;
 
-      const formattedItems = billItems.map((item) => ({
-        planName: item.planName || item.customDescription || 'Unknown Plan',
-        dataAmount: item.dataAmount || 'N/A',
-        validityDays: item.validityDays || 'N/A',
-        quantity: item.quantity,
-        unitPrice: parseFloat(item.unitPrice).toFixed(2),
-        totalAmount: parseFloat(item.totalAmount).toFixed(2),
-        isVATItem: item.planName?.includes('VAT (5%)') || item.customDescription?.includes('5% VAT')
-      }));
+      const formattedItems = esimItems.map((item) => {
+        const itemTotal = parseFloat(item.totalAmount);
+        const itemVat = isUAECompany ? itemTotal * vatRate : 0;
+        
+        return {
+          planName: item.planName || item.customDescription || 'Unknown Plan',
+          planDescription: item.planDescription || '',
+          dataAmount: item.dataAmount ? `${parseFloat(item.dataAmount).toFixed(1)} GB` : '',
+          validity: item.validity ? `${item.validity} days` : '',
+          quantity: item.quantity,
+          unitPrice: parseFloat(item.unitPrice).toFixed(2),
+          totalAmount: itemTotal.toFixed(2),
+          vatAmount: itemVat.toFixed(2),
+          vatPercentage: isUAECompany ? '5%' : '0%'
+        };
+      });
 
       const billingDate = new Date(bill.billingDate);
       const dueDate = new Date(billingDate.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -287,10 +294,10 @@ async function archiveInvoices() {
         dueDate: dueDate.toLocaleDateString(),
         subtotalAmount: subtotal.toFixed(2),
         vatAmount: vatTotal.toFixed(2),
-        totalAmount: parseFloat(bill.totalAmount).toFixed(2),
+        totalAmount: grandTotal.toFixed(2),
         currency: bill.currency || 'USD',
         items: formattedItems,
-        itemCount: billItems.length,
+        itemCount: formattedItems.length,
         hasVAT: isUAECompany,
         year: new Date().getFullYear()
       };
