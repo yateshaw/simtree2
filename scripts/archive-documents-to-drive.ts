@@ -1,0 +1,328 @@
+import 'dotenv/config';
+import { db } from '../server/db';
+import * as schema from '../shared/schema';
+import { eq } from 'drizzle-orm';
+import { Readable } from 'stream';
+import { driveService } from '../server/services/drive.service';
+import path from 'path';
+import { promises as fs } from 'fs';
+import handlebars from 'handlebars';
+import puppeteer from 'puppeteer';
+
+const RECEIPTS_FOLDER_ID = process.env.RECEIPTS_DRIVE_FOLDER_ID;
+const INVOICES_FOLDER_ID = process.env.INVOICES_DRIVE_FOLDER_ID;
+const CREDIT_NOTES_FOLDER_ID = process.env.CREDIT_NOTES_DRIVE_FOLDER_ID;
+
+const TEMPLATE_DIR = path.join(process.cwd(), 'server/templates/emails');
+const LOGO_PATH = path.join(process.cwd(), 'public/images/logoST.png');
+
+async function compileTemplate(templateName: string, data: any): Promise<string> {
+  const templatePath = path.join(TEMPLATE_DIR, `${templateName}.handlebars`);
+  const templateContent = await fs.readFile(templatePath, 'utf-8');
+  const template = handlebars.compile(templateContent);
+  return template(data);
+}
+
+async function convertHtmlToPdf(html: string): Promise<Buffer> {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+  });
+  
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+    });
+    return Buffer.from(pdfBuffer);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function embedLogoInHtml(html: string): Promise<string> {
+  try {
+    const logoBuffer = await fs.readFile(LOGO_PATH);
+    const logoBase64 = logoBuffer.toString('base64');
+    const logoDataUrl = `data:image/png;base64,${logoBase64}`;
+    return html.replace('src="cid:logoST"', `src="${logoDataUrl}"`);
+  } catch (error) {
+    console.error('[Archive] Failed to embed logo:', error);
+    return html;
+  }
+}
+
+async function uploadToDrive(pdfBuffer: Buffer, fileName: string, folderId: string): Promise<string | null> {
+  try {
+    const readableStream = new Readable();
+    readableStream.push(pdfBuffer);
+    readableStream.push(null);
+
+    const result = await driveService.uploadFile({
+      name: fileName,
+      mimeType: 'application/pdf',
+      readableStream,
+      folderId
+    });
+
+    return result.fileId;
+  } catch (error) {
+    console.error(`[Archive] Failed to upload ${fileName}:`, error);
+    return null;
+  }
+}
+
+async function archiveReceipts() {
+  if (!RECEIPTS_FOLDER_ID) {
+    console.log('[Archive] RECEIPTS_DRIVE_FOLDER_ID not set, skipping receipts');
+    return;
+  }
+
+  console.log('\n========== ARCHIVING RECEIPTS ==========');
+  
+  const receipts = await db.select({
+    receipt: schema.receipts,
+    company: schema.companies
+  })
+  .from(schema.receipts)
+  .leftJoin(schema.companies, eq(schema.receipts.companyId, schema.companies.id));
+
+  console.log(`[Archive] Found ${receipts.length} receipts to archive`);
+
+  let success = 0, failed = 0;
+
+  for (const { receipt, company } of receipts) {
+    try {
+      const templateData = {
+        receiptNumber: receipt.receiptNumber,
+        companyName: company?.name || 'Unknown',
+        amount: parseFloat(receipt.amount).toFixed(2),
+        paymentMethod: receipt.paymentMethod || 'N/A',
+        paymentDate: new Date(receipt.createdAt!).toLocaleDateString(),
+        description: receipt.description || 'Account Credit',
+        currency: 'USD',
+        year: new Date().getFullYear()
+      };
+
+      let html = await compileTemplate('receipt', templateData);
+      html = await embedLogoInHtml(html);
+      const pdfBuffer = await convertHtmlToPdf(html);
+
+      const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
+      const parts = receipt.receiptNumber.split('-');
+      const prefix = parts[0];
+      const date = parts.length >= 3 ? parts[1] : '';
+      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
+      const fileName = `${prefix}-${sanitizedCompanyName}-${date}-${sequence}.pdf`;
+
+      const fileId = await uploadToDrive(pdfBuffer, fileName, RECEIPTS_FOLDER_ID);
+      if (fileId) {
+        console.log(`[Archive] ✓ Receipt ${receipt.receiptNumber} -> ${fileName}`);
+        success++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.error(`[Archive] ✗ Receipt ${receipt.receiptNumber}:`, error);
+      failed++;
+    }
+  }
+
+  console.log(`[Archive] Receipts: ${success} success, ${failed} failed`);
+}
+
+async function archiveInvoices() {
+  if (!INVOICES_FOLDER_ID) {
+    console.log('[Archive] INVOICES_DRIVE_FOLDER_ID not set, skipping invoices');
+    return;
+  }
+
+  console.log('\n========== ARCHIVING INVOICES ==========');
+  
+  const bills = await db.select({
+    bill: schema.bills,
+    company: schema.companies
+  })
+  .from(schema.bills)
+  .leftJoin(schema.companies, eq(schema.bills.companyId, schema.companies.id));
+
+  console.log(`[Archive] Found ${bills.length} invoices to archive`);
+
+  let success = 0, failed = 0;
+
+  for (const { bill, company } of bills) {
+    try {
+      const billItems = await db.select()
+        .from(schema.billItems)
+        .where(eq(schema.billItems.billId, bill.id));
+
+      const esimItems = billItems.filter(item => 
+        !item.planName?.includes('VAT (5%)') && 
+        !item.customDescription?.includes('5% VAT')
+      );
+      
+      const vatItems = billItems.filter(item => 
+        item.planName?.includes('VAT (5%)') || 
+        item.customDescription?.includes('5% VAT')
+      );
+      
+      const subtotal = esimItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
+      const vatTotal = vatItems.reduce((sum, item) => sum + parseFloat(item.totalAmount), 0);
+      const isUAECompany = vatTotal > 0;
+
+      const formattedItems = billItems.map((item) => ({
+        planName: item.planName || item.customDescription || 'Unknown Plan',
+        dataAmount: item.dataAmount || 'N/A',
+        validityDays: item.validityDays || 'N/A',
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.unitPrice).toFixed(2),
+        totalAmount: parseFloat(item.totalAmount).toFixed(2),
+        isVATItem: item.planName?.includes('VAT (5%)') || item.customDescription?.includes('5% VAT')
+      }));
+
+      const billingDate = new Date(bill.billingDate);
+      const dueDate = new Date(billingDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const invoiceTemplateData = {
+        billNumber: bill.billNumber,
+        companyName: company?.name || 'Unknown',
+        companyAddress: company?.address || '[Client Business Address]',
+        companyTrn: company?.taxNumber || '[Tax Registration Number]',
+        billingDate: billingDate.toLocaleDateString(),
+        dueDate: dueDate.toLocaleDateString(),
+        subtotalAmount: subtotal.toFixed(2),
+        vatAmount: vatTotal.toFixed(2),
+        totalAmount: parseFloat(bill.totalAmount).toFixed(2),
+        currency: bill.currency || 'USD',
+        items: formattedItems,
+        itemCount: billItems.length,
+        hasVAT: isUAECompany,
+        year: new Date().getFullYear()
+      };
+
+      let html = await compileTemplate('invoice-template', invoiceTemplateData);
+      html = await embedLogoInHtml(html);
+      const pdfBuffer = await convertHtmlToPdf(html);
+
+      const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
+      const parts = bill.billNumber.split('-');
+      const prefix = parts[0];
+      const date = parts.length >= 3 ? parts[1] : '';
+      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
+      const fileName = `${prefix}-${sanitizedCompanyName}-${date}-${sequence}.pdf`;
+
+      const fileId = await uploadToDrive(pdfBuffer, fileName, INVOICES_FOLDER_ID);
+      if (fileId) {
+        console.log(`[Archive] ✓ Invoice ${bill.billNumber} -> ${fileName}`);
+        success++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.error(`[Archive] ✗ Invoice ${bill.billNumber}:`, error);
+      failed++;
+    }
+  }
+
+  console.log(`[Archive] Invoices: ${success} success, ${failed} failed`);
+}
+
+async function archiveCreditNotes() {
+  if (!CREDIT_NOTES_FOLDER_ID) {
+    console.log('[Archive] CREDIT_NOTES_DRIVE_FOLDER_ID not set, skipping credit notes');
+    return;
+  }
+
+  console.log('\n========== ARCHIVING CREDIT NOTES ==========');
+  
+  const creditNotes = await db.select({
+    creditNote: schema.creditNotes,
+    company: schema.companies
+  })
+  .from(schema.creditNotes)
+  .leftJoin(schema.companies, eq(schema.creditNotes.companyId, schema.companies.id));
+
+  console.log(`[Archive] Found ${creditNotes.length} credit notes to archive`);
+
+  let success = 0, failed = 0;
+
+  for (const { creditNote, company } of creditNotes) {
+    try {
+      const creditNoteItems = await db.select()
+        .from(schema.creditNoteItems)
+        .where(eq(schema.creditNoteItems.creditNoteId, creditNote.id));
+
+      const formattedItems = creditNoteItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.unitPrice).toFixed(2),
+        totalAmount: parseFloat(item.totalAmount).toFixed(2)
+      }));
+
+      const templateData = {
+        creditNoteNumber: creditNote.creditNoteNumber,
+        companyName: company?.name || 'Unknown',
+        companyAddress: company?.address || '[Client Business Address]',
+        issueDate: new Date(creditNote.createdAt!).toLocaleDateString(),
+        totalAmount: parseFloat(creditNote.totalAmount).toFixed(2),
+        currency: 'USD',
+        items: formattedItems,
+        reason: creditNote.reason || 'eSIM Cancellation Refund',
+        year: new Date().getFullYear()
+      };
+
+      let html = await compileTemplate('credit-note-simple', templateData);
+      html = await embedLogoInHtml(html);
+      const pdfBuffer = await convertHtmlToPdf(html);
+
+      const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
+      const parts = creditNote.creditNoteNumber.split('-');
+      const prefix = parts[0];
+      const date = parts.length >= 3 ? parts[1] : '';
+      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
+      const fileName = `${prefix}-${sanitizedCompanyName}-${date}-${sequence}.pdf`;
+
+      const fileId = await uploadToDrive(pdfBuffer, fileName, CREDIT_NOTES_FOLDER_ID);
+      if (fileId) {
+        console.log(`[Archive] ✓ Credit Note ${creditNote.creditNoteNumber} -> ${fileName}`);
+        success++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.error(`[Archive] ✗ Credit Note ${creditNote.creditNoteNumber}:`, error);
+      failed++;
+    }
+  }
+
+  console.log(`[Archive] Credit Notes: ${success} success, ${failed} failed`);
+}
+
+async function main() {
+  console.log('========================================');
+  console.log('  DOCUMENT ARCHIVE TO GOOGLE DRIVE');
+  console.log('========================================');
+  console.log(`Template Directory: ${TEMPLATE_DIR}`);
+  console.log(`Receipts Folder: ${RECEIPTS_FOLDER_ID ? 'Configured' : 'NOT SET'}`);
+  console.log(`Invoices Folder: ${INVOICES_FOLDER_ID ? 'Configured' : 'NOT SET'}`);
+  console.log(`Credit Notes Folder: ${CREDIT_NOTES_FOLDER_ID ? 'Configured' : 'NOT SET'}`);
+
+  try {
+    await archiveReceipts();
+    await archiveInvoices();
+    await archiveCreditNotes();
+
+    console.log('\n========================================');
+    console.log('  ARCHIVE COMPLETE');
+    console.log('========================================');
+  } catch (error) {
+    console.error('[Archive] Fatal error:', error);
+  } finally {
+    process.exit(0);
+  }
+}
+
+main();
