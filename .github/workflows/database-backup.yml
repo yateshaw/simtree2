@@ -44,16 +44,28 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
           GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
           GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
         run: |
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
           import { exec } from 'child_process';
           import { createReadStream, unlinkSync, existsSync } from 'fs';
           import { promisify } from 'util';
+          import sgMail from '@sendgrid/mail';
           const execAsync = promisify(exec);
 
-          const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY } = process.env;
+          const { 
+            BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, 
+            GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, 
+            GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, 
+            FROM_EMAIL, NOTIFICATION_EMAIL 
+          } = process.env;
+
           const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
+
+          sgMail.setApiKey(SENDGRID_API_KEY);
 
           const auth = new google.auth.GoogleAuth({
             credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON),
@@ -61,7 +73,54 @@ jobs:
           });
           const drive = google.drive({ version: 'v3', auth });
 
+          async function sendSummary(content) {
+            console.log(">>> Enviando Reporte Semanal por Email...");
+            const msg = {
+              to: NOTIFICATION_EMAIL,
+              from: FROM_EMAIL,
+              subject: `Simtree DB: Weekly Backup Summary`,
+              text: content,
+              html: `<pre style="font-family: monospace;">${content}</pre>`
+            };
+            await sgMail.send(msg);
+            console.log(">>> Email enviado exitosamente.");
+          }
+
           async function run() {
+            // Si es un resumen semanal, no hacemos dump, solo listamos y enviamos mail
+            if (BACKUP_TYPE === 'weekly-summary') {
+              let report = "RESUMEN SEMANAL DE BACKUPS EN DRIVE\n";
+              report += "====================================\n\n";
+              
+              const folders = [
+                { name: 'HOURLY', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY },
+                { name: 'DAILY', id: GOOGLE_DRIVE_FOLDER_ID_DAILY },
+                { name: 'MONTHLY', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY }
+              ];
+
+              for (const f of folders) {
+                const res = await drive.files.list({
+                  q: `'${f.id}' in parents and trashed=false`,
+                  fields: 'files(name, size, createdTime)',
+                  orderBy: 'createdTime desc',
+                  supportsAllDrives: true,
+                  includeItemsFromAllDrives: true
+                });
+                const files = res.data.files || [];
+                report += `📁 ${f.name}:\n`;
+                report += `- Total archivos: ${files.length}\n`;
+                if (files.length > 0) {
+                  report += `- Último: ${files[0].name} (${(files[0].size / 1024 / 1024).toFixed(2)} MB)\n`;
+                  report += `- Fecha: ${files[0].createdTime}\n`;
+                }
+                report += "\n";
+              }
+              
+              await sendSummary(report);
+              return;
+            }
+
+            // --- Lógica Normal de Backup ---
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
@@ -71,14 +130,13 @@ jobs:
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
             
-            console.log(`>>> Subiendo nuevo archivo: ${fileName}`);
             await drive.files.create({ 
               requestBody: { name: fileName, parents: [folderId] }, 
               media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, 
               supportsAllDrives: true 
             });
 
-            console.log(">>> Iniciando limpieza profunda (usando papelera para forzar borrado)...");
+            console.log(">>> Iniciando limpieza profunda...");
             let continueCleaning = true;
             let totalDeleted = 0;
 
@@ -101,7 +159,6 @@ jobs:
                 
                 for (const file of toDelete) {
                   try {
-                    // Marcamos como basura (esto funciona mejor con archivos de otros dueños)
                     await drive.files.update({ 
                       fileId: file.id, 
                       requestBody: { trashed: true },
@@ -110,34 +167,23 @@ jobs:
                     totalDeleted++;
                   } catch (e) {
                     if (e.code === 404) continue;
-                    if (e.code === 403 || e.code === 429) {
-                      console.log(">>> Límite de API. Esperando 5s...");
-                      await new Promise(r => setTimeout(r, 5000));
-                    } else {
-                      console.error(`>>> Error en ${file.name}: ${e.message}`);
-                    }
+                    console.error(`>>> Error en ${file.name}: ${e.message}`);
                   }
                 }
-                console.log(">>> Tanda completada. Verificando si Google soltó más archivos...");
                 await new Promise(r => setTimeout(r, 2000));
               } else {
                 continueCleaning = false;
               }
             }
 
-            console.log(`>>> Limpieza finalizada. Total removidos: ${totalDeleted}`);
-            const finalCheck = await drive.files.list({ 
-              q: `'${folderId}' in parents and trashed=false`, 
-              supportsAllDrives: true, 
-              includeItemsFromAllDrives: true,
-              fields: 'files(id)' 
-            });
-            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos activos.`);
-
+            console.log(`>>> Limpieza finalizada. Quedan ${(limit || 'N/A')} archivos.`);
             if (existsSync(filePath)) unlinkSync(filePath);
             console.log(">>> ✅ Proceso terminado.");
           }
 
-          run().catch(e => { console.error(e); process.exit(1); });
+          run().catch(e => { 
+            console.error(">>> ERROR CRÍTICO:", e);
+            process.exit(1); 
+          });
           EOF
           node backup.mjs
