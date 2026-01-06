@@ -355,7 +355,8 @@ export async function sendReceiptEmail(
 export async function generateInvoiceHTML(
   bill: any,
   company: any,
-  billItems: any[]
+  billItems: any[],
+  embedLogo: boolean = true
 ): Promise<string> {
   // Separate eSIM items from VAT items
   const esimItems = billItems.filter(item => 
@@ -418,7 +419,23 @@ export async function generateInvoiceHTML(
   };
 
   // Compile the professional invoice HTML
-  return await compileTemplate('invoice-template', invoiceTemplateData);
+  let html = await compileTemplate('invoice-template', invoiceTemplateData);
+  
+  // If embedLogo is true, replace cid:logoST with base64 data URL for PDF viewing
+  if (embedLogo) {
+    try {
+      const logoPath = path.join(__dirname, '../../public/images/logoST.png');
+      const logoBuffer = await fs.readFile(logoPath);
+      const logoBase64 = logoBuffer.toString('base64');
+      const logoDataUrl = `data:image/png;base64,${logoBase64}`;
+      html = html.replace('src="cid:logoST"', `src="${logoDataUrl}"`);
+      console.log('[Email] Embedded logo as base64 for PDF viewing');
+    } catch (logoError) {
+      console.error('[Email] Failed to embed logo:', logoError);
+    }
+  }
+  
+  return html;
 }
 
 // Send bill email
