@@ -152,26 +152,41 @@ async function archiveReceipts() {
 async function migrateBillNumbers() {
   console.log('\n========== MIGRATING BILL NUMBERS ==========');
   
-  const bills = await db.select().from(schema.bills);
+  const bills = await db.select().from(schema.bills).orderBy(schema.bills.id);
   let migrated = 0;
+  let skipped = 0;
+
+  // First, find all existing bill numbers to avoid conflicts
+  const existingNumbers = new Set(bills.map(b => b.billNumber));
 
   for (const bill of bills) {
     // Check if bill number has old format (BILL-YYYYMMDD-XXXX)
     const oldFormatMatch = bill.billNumber.match(/^BILL-\d{8}-(\d+)$/);
     if (oldFormatMatch) {
-      const sequence = oldFormatMatch[1];
-      const newBillNumber = `BILL-${sequence}`;
+      // Use the bill's database ID for a guaranteed unique number
+      const newBillNumber = `BILL-${String(bill.id).padStart(4, '0')}`;
+      
+      // Check if this new number already exists
+      if (existingNumbers.has(newBillNumber)) {
+        console.log(`[Migrate] Skipping ${bill.billNumber} - ${newBillNumber} already exists`);
+        skipped++;
+        continue;
+      }
       
       await db.update(schema.bills)
         .set({ billNumber: newBillNumber })
         .where(eq(schema.bills.id, bill.id));
       
+      existingNumbers.add(newBillNumber);
       console.log(`[Migrate] ${bill.billNumber} -> ${newBillNumber}`);
       migrated++;
+    } else {
+      console.log(`[Migrate] Skipping ${bill.billNumber} - already in new format`);
+      skipped++;
     }
   }
 
-  console.log(`[Migrate] Migrated ${migrated} bill numbers to new format`);
+  console.log(`[Migrate] Migrated ${migrated} bill numbers, skipped ${skipped}`);
 }
 
 async function archiveInvoices() {
