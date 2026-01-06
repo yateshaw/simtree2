@@ -1,0 +1,143 @@
+~/workspace$ npx tsx scripts/archive-documents-to-drive.ts
+[Archive] Connecting to PRODUCTION database...
+========================================
+  DOCUMENT ARCHIVE TO GOOGLE DRIVE
+========================================
+Template Directory: /home/runner/workspace/server/templates/emails
+Receipts Folder: Configured
+Invoices Folder: Configured
+Credit Notes Folder: Configured
+
+========== MIGRATING BILL NUMBERS ==========
+[Migrate] Skipping BILL-0001 - already in new format
+[Migrate] BILL-20251230-0001 -> BILL-0002
+[Migrate] BILL-20260102-0001 -> BILL-0003
+[Migrate] BILL-20260102-0004 -> BILL-0004
+[Migrate] BILL-20260104-0001 -> BILL-0005
+[Migrate] BILL-20260106-0001 -> BILL-0006
+[Migrate] Migrated 5 bill numbers, skipped 1
+
+========== ARCHIVING RECEIPTS ==========
+[Archive] Found 3 receipts to archive
+[Archive] ✗ Receipt RCP-20251225-0001: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveReceipts (/home/runner/workspace/scripts/archive-documents-to-drive.ts:127:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:377:5)
+[Archive] ✗ Receipt RCP-20251226-0001: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveReceipts (/home/runner/workspace/scripts/archive-documents-to-drive.ts:127:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:377:5)
+[Archive] ✗ Receipt RCP-20251229-0001: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveReceipts (/home/runner/workspace/scripts/archive-documents-to-drive.ts:127:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:377:5)
+[Archive] Receipts: 0 success, 3 failed
+
+========== ARCHIVING INVOICES ==========
+[Archive] Found 6 invoices to archive
+[Archive] ✗ Invoice BILL-0001: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] ✗ Invoice BILL-0002: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] ✗ Invoice BILL-0003: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] ✗ Invoice BILL-0004: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] ✗ Invoice BILL-0005: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] ✗ Invoice BILL-0006: Error: Could not find Chrome (ver. 140.0.7339.80). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:276:27)
+    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)
+    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)
+    at async convertHtmlToPdf (/home/runner/workspace/scripts/archive-documents-to-drive.ts:42:19)
+    at async archiveInvoices (/home/runner/workspace/scripts/archive-documents-to-drive.ts:263:25)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:378:5)
+[Archive] Invoices: 0 success, 6 failed
+
+========== ARCHIVING CREDIT NOTES ==========
+[Archive] Fatal error: error: column credit_notes.original_bill_id does not exist
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async archiveCreditNotes (/home/runner/workspace/scripts/archive-documents-to-drive.ts:300:23)
+    at async main (/home/runner/workspace/scripts/archive-documents-to-drive.ts:379:5) {
+  length: 127,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '95',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3716',
+  routine: 'errorMissingColumn'
+}
+~/workspace$ 

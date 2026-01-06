@@ -38,10 +38,44 @@ async function compileTemplate(templateName: string, data: any): Promise<string>
   return template(data);
 }
 
+async function findChromiumPath(): Promise<string | undefined> {
+  const { execSync } = await import('child_process');
+  const fsModule = await import('fs');
+  
+  const paths = [
+    '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-130.0.6723.116/bin/chromium',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome'
+  ];
+  
+  // Try 'which chromium' first
+  try {
+    const chromiumPath = execSync('which chromium', { encoding: 'utf8' }).trim();
+    if (chromiumPath && fsModule.existsSync(chromiumPath)) {
+      console.log(`[PDF] Found Chromium at: ${chromiumPath}`);
+      return chromiumPath;
+    }
+  } catch (e) {}
+  
+  // Check known paths
+  for (const p of paths) {
+    if (fsModule.existsSync(p)) {
+      console.log(`[PDF] Found Chromium at: ${p}`);
+      return p;
+    }
+  }
+  
+  return undefined;
+}
+
 async function convertHtmlToPdf(html: string): Promise<Buffer> {
+  const executablePath = await findChromiumPath();
+  
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+    executablePath,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
   });
   
   try {
