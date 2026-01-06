@@ -22,25 +22,18 @@ export class BillingService {
   
   /**
    * Generate a unique receipt number
+   * Format: RCP-0001 (sequential, no date in the number)
    */
   private async generateReceiptNumber(): Promise<string> {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    
-    // Find the latest receipt for today
+    // Find the latest receipt globally to get the next sequence number
     const latestReceipt = await db
       .select()
       .from(schema.receipts)
-      .where(
-        gte(schema.receipts.createdAt, new Date(today.getFullYear(), today.getMonth(), today.getDate()))
-      )
       .orderBy(desc(schema.receipts.id))
       .limit(1);
     
     const sequence = latestReceipt.length > 0 ? latestReceipt[0].id + 1 : 1;
-    return `RCP-${year}${month}${day}-${String(sequence).padStart(4, '0')}`;
+    return `RCP-${String(sequence).padStart(4, '0')}`;
   }
 
   /**

@@ -163,9 +163,12 @@ async function archiveReceipts() {
       const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
       const parts = receipt.receiptNumber.split('-');
       const prefix = parts[0];
-      const date = parts.length >= 3 ? parts[1] : '';
-      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
-      const fileName = `${prefix}-${sanitizedCompanyName}-${date}-${sequence}.pdf`;
+      // Get date from receipt createdAt instead of receipt number
+      const receiptDate = new Date(receipt.createdAt!);
+      const dateStr = `${receiptDate.getFullYear()}${String(receiptDate.getMonth() + 1).padStart(2, '0')}${String(receiptDate.getDate()).padStart(2, '0')}`;
+      // Get sequence from receipt number (last part after prefix)
+      const sequence = parts[parts.length - 1];
+      const fileName = `${prefix}-${sanitizedCompanyName}-${dateStr}-${sequence}.pdf`;
 
       const fileId = await uploadToDrive(pdfBuffer, fileName, RECEIPTS_FOLDER_ID);
       if (fileId) {
