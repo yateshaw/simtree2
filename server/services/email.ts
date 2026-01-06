@@ -4,6 +4,7 @@ import handlebars from 'handlebars';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import { pdfStorageService } from './pdf-storage.service';
 
 // Get current file path and directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -322,6 +323,13 @@ export async function sendReceiptEmail(
     const receiptPdfBuffer = await convertHtmlToPdf(html);
     console.log(`[Email] Receipt PDF generated successfully, size: ${receiptPdfBuffer.length} bytes`);
 
+    // Store receipt PDF to Google Drive (production only)
+    try {
+      await pdfStorageService.storeReceipt(receiptPdfBuffer, receipt.receiptNumber, company.name);
+    } catch (storageError) {
+      console.error(`[Email] Failed to store receipt PDF to Drive:`, storageError);
+    }
+
     // Convert PDF to base64 for attachment
     const receiptPdfBase64 = receiptPdfBuffer.toString('base64');
     console.log(`[Email] Receipt PDF converted to base64, length: ${receiptPdfBase64.length}`);
@@ -486,6 +494,13 @@ export async function sendBillEmail(
     const invoicePdfBuffer = await convertHtmlToPdf(invoiceHtml);
     console.log(`[Email] Invoice PDF generated successfully, size: ${invoicePdfBuffer.length} bytes`);
 
+    // Store invoice PDF to Google Drive (production only)
+    try {
+      await pdfStorageService.storeInvoice(invoicePdfBuffer, bill.billNumber, company.name);
+    } catch (storageError) {
+      console.error(`[Email] Failed to store invoice PDF to Drive:`, storageError);
+    }
+
     // Convert PDF to base64 for attachment
     const invoicePdfBase64 = invoicePdfBuffer.toString('base64');
     console.log(`[Email] Invoice PDF converted to base64, length: ${invoicePdfBase64.length}`);
@@ -591,6 +606,13 @@ export async function sendCreditNoteEmail(
     const creditNoteHtml = await generateCreditNoteHTML(creditNote, company, creditNoteItems);
 
     const creditNotePdfBuffer = await convertHtmlToPdf(creditNoteHtml);
+
+    // Store credit note PDF to Google Drive (production only)
+    try {
+      await pdfStorageService.storeCreditNote(creditNotePdfBuffer, creditNote.creditNoteNumber, company.name);
+    } catch (storageError) {
+      console.error(`[Email] Failed to store credit note PDF to Drive:`, storageError);
+    }
 
     const creditNotePdfBase64 = creditNotePdfBuffer.toString('base64');
 
