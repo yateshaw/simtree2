@@ -4165,6 +4165,29 @@ export function registerRoutes(app: Express): Server {
               }
             }
           }
+          // Handle VAT transactions - show the client company that was charged VAT
+          else if (transaction.description.includes('VAT (5%):') && transaction.description.includes(' for ')) {
+            const employeeNameMatch = transaction.description.match(/for ([^+\-$]+)(?:[+\-$]|$)/);
+            if (employeeNameMatch && employeeNameMatch[1]) {
+              const employeeName = employeeNameMatch[1].trim();
+              
+              // Find the employee in the database
+              const employees = await db.select({
+                id: schema.employees.id,
+                name: schema.employees.name,
+                companyId: schema.employees.companyId
+              }).from(schema.employees)
+              .where(eq(schema.employees.name, employeeName));
+              
+              if (employees.length > 0) {
+                const employee = employees[0];
+                company = companies.find(c => c.id === employee.companyId);
+                if (company) {
+                  companyName = company.name;
+                }
+              }
+            }
+          }
           // Original logic for direct company name transactions
           else {
             const descriptionMatch = transaction.description.match(/^([^:]+):/);
