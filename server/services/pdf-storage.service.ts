@@ -60,7 +60,13 @@ class PdfStorageService {
 
     try {
       const sanitizedCompanyName = companyName?.replace(/[^a-zA-Z0-9-_ ]/g, '') || 'unknown';
-      const fileName = `${documentNumber}_${sanitizedCompanyName}.pdf`;
+      
+      // Extract prefix (RCP, BILL, CN) and sequence number from document number
+      // Format: RCP-20260106-0001 -> RCP-CompanyName-0001.pdf
+      const parts = documentNumber.split('-');
+      const prefix = parts[0]; // RCP, BILL, or CN
+      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
+      const fileName = `${prefix}-${sanitizedCompanyName}-${sequence}.pdf`;
 
       console.log(`[PdfStorage] Storing ${documentType} PDF: ${fileName} in folder ${folderId}`);
 
