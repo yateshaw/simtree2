@@ -1,10 +1,10 @@
 name: Production Database Backups
 on:
   schedule:
-    - cron: '0 6 * * *'     # Diarios
-    - cron: '0 8 1 * *'     # Mensuales
-    - cron: '0 * * * *'     # Por hora
-    - cron: '0 20 * * 5'    # Resumen semanal (Viernes)
+    - cron: '0 6 * * *'
+    - cron: '0 8 1 * *'
+    - cron: '0 * * * *'
+    - cron: '0 20 * * 5'
   workflow_dispatch:
     inputs:
       backup_type:
@@ -23,12 +23,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
       - name: Install PostgreSQL 17 client
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -36,10 +34,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
-
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail google-auth-library
-
       - name: Determine backup type
         id: backup-type
         run: |
@@ -92,7 +88,7 @@ jobs:
                   content: [{ type: 'text/html', value: html }]
                 })
               });
-            } catch (e) { console.error("Email failed:", e.message); }
+            } catch (e) { console.error("Email error:", e.message); }
           }
 
           async function run() {
@@ -102,51 +98,55 @@ jobs:
               let rows = "";
               const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
               const folders = [
-                { name: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, policy: '30' },
-                { name: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, policy: '12' },
-                { name: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY, policy: '48' }
+                { name: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, pol: '30' },
+                { name: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, pol: '12' },
+                { name: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY, pol: '48' }
               ];
-
               for (const f of folders) {
                 const res = await drive.files.list({ q: `'${f.id}' in parents and trashed=false`, fields: 'files(id, size, createdTime)', pageSize: 1000, supportsAllDrives: true, includeItemsFromAllDrives: true });
                 const files = res.data.files || [];
                 const thisWeek = files.filter(x => new Date(x.createdTime) > weekAgo).length;
-                const sizeMB = (files.reduce((a, b) => a + parseInt(b.size || 0), 0) / (1024*1024)).toFixed(2);
-                rows += `<tr><td style="padding:8px;border:1px solid #444">${f.name}</td><td style="padding:8px;border:1px solid #444">${thisWeek}</td><td style="padding:8px;border:1px solid #444">${files.length}</td><td style="padding:8px;border:1px solid #444">${sizeMB} MB</td><td style="padding:8px;border:1px solid #444">${f.policy}</td></tr>`;
+                const size = (files.reduce((a, b) => a + parseInt(b.size || 0), 0) / (1024*1024)).toFixed(2);
+                rows += `<tr><td style="padding:8px;border:1px solid #444">${f.name}</td><td style="padding:8px;border:1px solid #444">${thisWeek}</td><td style="padding:8px;border:1px solid #444">${files.length}</td><td style="padding:8px;border:1px solid #444">${size} MB</td><td style="padding:8px;border:1px solid #444">${f.pol}</td></tr>`;
               }
-              const html = `<div style="font-family:sans-serif;background:#1a1a1a;color:#fff;padding:20px"><h2>📊 SimTree Summary</h2><table style="width:100%;border-collapse:collapse;background:#2d2d2d"><thead><tr style="background:#444"><th>Type</th><th>Week</th><th>Total</th><th>Size</th><th>Policy</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-              await sendEmail("📊 SimTree Weekly Summary", html);
+              await sendEmail("📊 SimTree Backup Summary", `<div style="font-family:sans-serif;background:#1a1a1a;color:#fff;padding:20px"><h2>📊 Summary</h2><table style="width:100%;border-collapse:collapse;background:#2d2d2d"><thead><tr style="background:#444"><th>Type</th><th>Week</th><th>Total</th><th>Size</th><th>Policy</th></tr></thead><tbody>${rows}</tbody></table></div>`);
               return;
             }
 
-            // Lógica de Backup
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-${new Date().getTime()}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
+            console.log(`>>> Iniciando Backup: ${BACKUP_TYPE}`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
             
             await drive.files.create({ requestBody: { name: fileName, parents: [folderId] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
 
-            // LIMPIEZA MEJORADA
+            console.log(">>> Analizando limpieza...");
             const res = await drive.files.list({ q: `'${folderId}' in parents and trashed=false`, orderBy: 'createdTime asc', pageSize: 1000, fields: 'files(id, name)', supportsAllDrives: true, includeItemsFromAllDrives: true });
             const files = res.data.files || [];
+            
             if (files.length > RETENTION[BACKUP_TYPE]) {
               const toDelete = files.slice(0, files.length - RETENTION[BACKUP_TYPE]);
-              console.log(`>>> Borrando ${toDelete.length} archivos antiguos...`);
+              console.log(`>>> Se encontraron ${files.length} archivos. Borrando ${toDelete.length}...`);
+              
+              let deleted = 0;
               for (const file of toDelete) {
                 try {
                   await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                  deleted++;
+                  if (deleted % 25 === 0) console.log(`>>> Progreso: ${deleted}/${toDelete.length} borrados...`);
                 } catch (e) {
-                  // Si no existe o ya está en papelera, lo ignoramos
                   if (e.code !== 404) console.error(`Error en ${file.name}: ${e.message}`);
                 }
               }
+              console.log(`>>> Limpieza terminada. Se borraron ${deleted} archivos.`);
             }
+
             if (existsSync(filePath)) unlinkSync(filePath);
-            console.log(">>> ✅ Finalizado");
+            console.log(">>> ✅ Proceso completo.");
           }
           run().catch(e => { console.error(e); process.exit(1); });
           EOF
