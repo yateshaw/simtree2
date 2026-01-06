@@ -415,17 +415,21 @@ export function registerBillingRoutes(app: Express) {
 
   // View bill document as PDF (sadmin only)
   app.get("/api/sadmin/bills/:billId/view", async (req, res) => {
+    console.log(`[PDF-DEBUG] Bill view request received for billId: ${req.params.billId}`);
     try {
       if (!req.isAuthenticated() || !req.user?.isSuperAdmin) {
+        console.log(`[PDF-DEBUG] Unauthorized access attempt`);
         return res.status(401).json({ error: "Unauthorized" });
       }
 
       const billId = parseInt(req.params.billId);
+      console.log(`[PDF-DEBUG] Parsed billId: ${billId}`);
       if (isNaN(billId)) {
         return res.status(400).json({ error: "Invalid bill ID" });
       }
 
       // Get bill with company details and items
+      console.log(`[PDF-DEBUG] Fetching bill data from database...`);
       const [billData] = await db
         .select({
           bill: schema.bills,
@@ -435,31 +439,39 @@ export function registerBillingRoutes(app: Express) {
         .leftJoin(schema.companies, eq(schema.bills.companyId, schema.companies.id))
         .where(eq(schema.bills.id, billId));
 
+      console.log(`[PDF-DEBUG] Bill data fetched: ${billData ? 'found' : 'not found'}`);
       if (!billData) {
         return res.status(404).json({ error: "Bill not found" });
       }
 
       const { bill, company } = billData;
+      console.log(`[PDF-DEBUG] Bill: ${bill?.billNumber}, Company: ${company?.name}`);
       
       if (!company) {
         return res.status(404).json({ error: "Company not found for bill" });
       }
 
       // Get bill items
+      console.log(`[PDF-DEBUG] Fetching bill items...`);
       const billItems = await db
         .select()
         .from(schema.billItems)
         .where(eq(schema.billItems.billId, billId));
+      console.log(`[PDF-DEBUG] Found ${billItems.length} bill items`);
 
       // Generate PDF using the same method as receipts and emails
-      console.log(`[PDF] Starting bill PDF generation for ${bill.billNumber}`);
+      console.log(`[PDF-DEBUG] Starting bill PDF generation for ${bill.billNumber}`);
+      console.log(`[PDF-DEBUG] Importing email service...`);
       const { generateInvoiceHTML, convertHtmlToPdf } = await import('../services/email');
+      console.log(`[PDF-DEBUG] Email service imported successfully`);
       
+      console.log(`[PDF-DEBUG] Generating invoice HTML...`);
       const invoiceHTML = await generateInvoiceHTML(bill, company, billItems);
-      console.log(`[PDF] Invoice HTML generated successfully, length: ${invoiceHTML.length}`);
+      console.log(`[PDF-DEBUG] Invoice HTML generated successfully, length: ${invoiceHTML.length}`);
       
+      console.log(`[PDF-DEBUG] Converting HTML to PDF...`);
       const pdfBuffer = await convertHtmlToPdf(invoiceHTML);
-      console.log(`[PDF] Bill PDF generated successfully using email service method, size: ${pdfBuffer.length} bytes`);
+      console.log(`[PDF-DEBUG] Bill PDF generated successfully, size: ${pdfBuffer.length} bytes`);
 
       // Check if this is a download request or inline view
       const isDownload = req.query.download === 'true';
@@ -474,11 +486,14 @@ export function registerBillingRoutes(app: Express) {
       res.setHeader('Content-Length', pdfBuffer.length.toString());
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Accept-Ranges', 'bytes');
-      console.log(`[PDF] Sending bill PDF response for ${bill.billNumber}, size: ${pdfBuffer.length} bytes, type: ${isDownload ? 'download' : 'view'}`);
+      console.log(`[PDF-DEBUG] Sending bill PDF response for ${bill.billNumber}, size: ${pdfBuffer.length} bytes, type: ${isDownload ? 'download' : 'view'}`);
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      res.status(500).json({ error: "Failed to generate PDF" });
+      console.error("[PDF-DEBUG] ❌ Error generating bill PDF:");
+      console.error("[PDF-DEBUG] Error name:", error instanceof Error ? error.name : 'Unknown');
+      console.error("[PDF-DEBUG] Error message:", error instanceof Error ? error.message : String(error));
+      console.error("[PDF-DEBUG] Error stack:", error instanceof Error ? error.stack : 'No stack');
+      res.status(500).json({ error: "Failed to generate PDF", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
