@@ -1,10 +1,10 @@
 name: Production Database Backups
 on:
   schedule:
-    - cron: '0 6 * * *'     # Diarios
-    - cron: '0 8 1 * *'     # Mensuales
+    - cron: '0 6 * * *'     # Diarios 06:00 UTC
+    - cron: '0 8 1 * *'     # Mensuales el día 1
     - cron: '0 * * * *'     # Por hora
-    - cron: '0 20 * * 5'    # Resumen semanal
+    - cron: '0 20 * * 5'    # Resumen semanal viernes
   workflow_dispatch:
     inputs:
       backup_type:
@@ -65,31 +65,31 @@ jobs:
           SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
           BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
         run: |
-          # Aquí creamos el archivo backup.mjs al vuelo
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
           import { exec } from 'child_process';
-          import { createReadStream, statSync, unlinkSync } from 'fs';
+          import { createReadStream, statSync, unlinkSync, existsSync } from 'fs';
           import { promisify } from 'util';
           const execAsync = promisify(exec);
 
-          const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, NOTIFICATION_EMAIL, FROM_EMAIL } = process.env;
+          const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY } = process.env;
           const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
 
           function getAuth() {
             return new google.auth.GoogleAuth({
               credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON),
-              scopes: ['https://www.googleapis.com/auth/drive'] // SCOPE CORREGIDO
+              scopes: ['https://www.googleapis.com/auth/drive']
             });
           }
 
           async function uploadFile(filePath, fileName, folderId) {
             const drive = google.drive({ version: 'v3', auth: getAuth() });
-            await drive.files.create({
+            const res = await drive.files.create({
               requestBody: { name: fileName, parents: [folderId] },
               media: { mimeType: 'application/gzip', body: createReadStream(filePath) },
               supportsAllDrives: true
             });
+            console.log(`✅ Archivo subido con ID: ${res.data.id}`);
           }
 
           async function manageRetention(folderId, max) {
@@ -102,34 +102,58 @@ jobs:
               includeItemsFromAllDrives: true
             });
             const files = res.data.files || [];
+            console.log(`Archivos en carpeta: ${files.length} (Máximo permitido: ${max})`);
+            
             if (files.length > max) {
-              for (const file of files.slice(0, files.length - max)) {
-                await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+              const toDelete = files.slice(0, files.length - max);
+              for (const file of toDelete) {
+                try {
+                  console.log(`Eliminando backup antiguo: ${file.name}`);
+                  await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                } catch (err) {
+                  if (err.code === 404) {
+                    console.log(`El archivo ${file.name} ya no existe en Drive, saltando...`);
+                  } else {
+                    console.error(`No se pudo eliminar ${file.name}: ${err.message}`);
+                  }
+                }
               }
             }
           }
 
           async function run() {
-            const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
-            const fileName = `simtree-${BACKUP_TYPE}-${new Date().getTime()}.sql.gz`;
+            let folderId;
+            if (BACKUP_TYPE === 'hourly') folderId = GOOGLE_DRIVE_FOLDER_ID_HOURLY;
+            else if (BACKUP_TYPE === 'monthly') folderId = GOOGLE_DRIVE_FOLDER_ID_MONTHLY;
+            else folderId = GOOGLE_DRIVE_FOLDER_ID_DAILY;
+
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            const fileName = `simtree-${BACKUP_TYPE}-${timestamp}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
-            console.log(`Iniciando backup: ${fileName}`);
+            console.log(`Iniciando backup tipo [${BACKUP_TYPE}]...`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
-            if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
+            if (BACKUP_TYPE === 'hourly') {
+              cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
+            }
             
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
+            
+            const stats = statSync(filePath);
+            console.log(`Backup creado localmente: ${fileName} (${(stats.size / 1024).toFixed(2)} KB)`);
+
             await uploadFile(filePath, fileName, folderId);
             await manageRetention(folderId, RETENTION[BACKUP_TYPE]);
-            unlinkSync(filePath);
-            console.log("✅ Backup completado");
+            
+            if (existsSync(filePath)) unlinkSync(filePath);
+            console.log("🚀 Proceso completado exitosamente.");
           }
 
-          run().catch(async err => {
+          run().catch(err => {
+            console.error("❌ ERROR CRÍTICO:");
             console.error(err);
             process.exit(1);
           });
           EOF
           
-          # Ahora que el archivo existe, lo ejecutamos
           node backup.mjs
