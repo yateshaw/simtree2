@@ -27,8 +27,11 @@ if (!process.env.SENDGRID_API_KEY) {
   }
 }
 
-// Path to the email templates
-const TEMPLATE_DIR = path.join(__dirname, '../templates/emails');
+// Path to the email templates - use process.cwd() for production compatibility
+// In development: /home/runner/workspace/server/templates/emails
+// In production: /home/runner/workspace/server/templates/emails (same path works)
+const TEMPLATE_DIR = path.join(process.cwd(), 'server/templates/emails');
+console.log(`[Email Service] Template directory: ${TEMPLATE_DIR}`);
 
 // Helper to compile a template with handlebars
 export async function compileTemplate(templateName: string, data: any): Promise<string> {
