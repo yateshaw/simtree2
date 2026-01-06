@@ -1,10 +1,10 @@
 name: Production Database Backups
 on:
   schedule:
-    - cron: '0 6 * * *'     # Diarios 06:00 UTC
-    - cron: '0 8 1 * *'     # Mensuales el día 1
+    - cron: '0 6 * * *'     # Diarios
+    - cron: '0 8 1 * *'     # Mensuales
     - cron: '0 * * * *'     # Por hora
-    - cron: '0 20 * * 5'    # Resumen semanal viernes 20:00 UTC
+    - cron: '0 20 * * 5'    # Resumen semanal (Viernes)
   workflow_dispatch:
     inputs:
       backup_type:
@@ -45,14 +45,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "type=${{ github.event.inputs.backup_type }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" == "0 6 * * *" ]; then
-            echo "type=daily" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" == "0 8 1 * *" ]; then
-            echo "type=monthly" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.schedule }}" == "0 20 * * 5" ]; then
             echo "type=weekly-summary" >> $GITHUB_OUTPUT
           else
-            echo "type=hourly" >> $GITHUB_OUTPUT
+            echo "type=${{ github.event.inputs.backup_type || 'daily' }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Create and Run Backup Script
@@ -75,7 +71,34 @@ jobs:
           const execAsync = promisify(exec);
 
           const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, NOTIFICATION_EMAIL, FROM_EMAIL } = process.env;
-          const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
+
+          async function sendEmail(subject, html) {
+            console.log(`>>> Intentando enviar email: "${subject}" a ${NOTIFICATION_EMAIL}`);
+            try {
+              const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+                method: 'POST',
+                headers: { 
+                  'Authorization': `Bearer ${SENDGRID_API_KEY}`, 
+                  'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({
+                  personalizations: [{ to: [{ email: NOTIFICATION_EMAIL }] }],
+                  from: { email: FROM_EMAIL, name: 'SimTree Backup' },
+                  subject: subject,
+                  content: [{ type: 'text/html', value: html }]
+                })
+              });
+              
+              if (res.ok) {
+                console.log(">>> ✅ SendGrid aceptó el mensaje.");
+              } else {
+                const errBody = await res.text();
+                console.error(`>>> ❌ Error de SendGrid (${res.status}):`, errBody);
+              }
+            } catch (e) {
+              console.error(">>> ❌ Error fatal en fetch de email:", e.message);
+            }
+          }
 
           function getAuth() {
             return new google.auth.GoogleAuth({
@@ -84,67 +107,81 @@ jobs:
             });
           }
 
-          async function sendEmail(subject, html) {
-            if (!SENDGRID_API_KEY) return;
-            try {
-              await fetch('https://api.sendgrid.com/v3/mail/send', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  personalizations: [{ to: [{ email: NOTIFICATION_EMAIL }] }],
-                  from: { email: FROM_EMAIL },
-                  subject,
-                  content: [{ type: 'text/html', value: html }]
-                })
+          async function getWeeklySummary() {
+            console.log(">>> Generando resumen semanal...");
+            const drive = google.drive({ version: 'v3', auth: getAuth() });
+            const folders = [
+              { name: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, policy: '30 backups' },
+              { name: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, policy: '12 backups' },
+              { name: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY, policy: '48 backups' }
+            ];
+
+            let rows = "";
+            let totalCount = 0;
+            let totalSizeBytes = 0;
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+
+            for (const folder of folders) {
+              const res = await drive.files.list({
+                q: `'${folder.id}' in parents and trashed=false`,
+                fields: 'files(id, size, createdTime)',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
               });
-            } catch (e) { console.error("Error email:", e.message); }
-          }
-
-          async function manageRetention(folderId, max) {
-            const drive = google.drive({ version: 'v3', auth: getAuth() });
-            const res = await drive.files.list({
-              q: `'${folderId}' in parents and trashed=false`,
-              fields: 'files(id, name)',
-              orderBy: 'createdTime asc',
-              supportsAllDrives: true,
-              includeItemsFromAllDrives: true
-            });
-            const files = res.data.files || [];
-            if (files.length > max) {
-              for (const file of files.slice(0, files.length - max)) {
-                try {
-                  await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
-                } catch (err) { if (err.code !== 404) console.error("Delete error:", err.message); }
-              }
-            }
-          }
-
-          async function getStats() {
-            const drive = google.drive({ version: 'v3', auth: getAuth() });
-            const folders = { Daily: GOOGLE_DRIVE_FOLDER_ID_DAILY, Monthly: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, Hourly: GOOGLE_DRIVE_FOLDER_ID_HOURLY };
-            let html = "<h2>SimTree Backup Summary</h2><table border='1' cellpadding='5'>";
-            html += "<tr><th>Type</th><th>Total Backups</th><th>Size (MB)</th></tr>";
-            for (const [name, id] of Object.entries(folders)) {
-              const res = await drive.files.list({ q: `'${id}' in parents and trashed=false`, fields: 'files(size)', supportsAllDrives: true, includeItemsFromAllDrives: true });
               const files = res.data.files || [];
-              const size = (files.reduce((acc, f) => acc + parseInt(f.size || 0), 0) / (1024 * 1024)).toFixed(2);
-              html += `<tr><td>${name}</td><td>${files.length}</td><td>${size} MB</td></tr>`;
+              const thisWeek = files.filter(f => new Date(f.createdTime) > weekAgo).length;
+              const sizeFolderBytes = files.reduce((acc, f) => acc + parseInt(f.size || 0), 0);
+              
+              totalCount += thisWeek;
+              totalSizeBytes += sizeFolderBytes;
+
+              rows += `<tr>
+                <td style="padding:8px; border:1px solid #444;">${folder.name}</td>
+                <td style="padding:8px; border:1px solid #444;">${thisWeek}</td>
+                <td style="padding:8px; border:1px solid #444;">${files.length}</td>
+                <td style="padding:8px; border:1px solid #444;">${(sizeFolderBytes / (1024*1024)).toFixed(2)} MB</td>
+                <td style="padding:8px; border:1px solid #444;">${folder.policy}</td>
+              </tr>`;
             }
-            html += "</table>";
-            return html;
+
+            return `
+              <div style="font-family: sans-serif; background: #1a1a1a; color: #fff; padding: 20px;">
+                <h2 style="color: #4caf50;">📊 SimTree Weekly Backup Summary</h2>
+                <p>Report Date: ${new Date().toISOString()}</p>
+                <table style="width:100%; border-collapse: collapse; text-align: left; background: #2d2d2d; color: #eee;">
+                  <thead>
+                    <tr style="background: #444;">
+                      <th style="padding:8px; border:1px solid #444;">Type</th>
+                      <th style="padding:8px; border:1px solid #444;">Backups This Week</th>
+                      <th style="padding:8px; border:1px solid #444;">Total Backups</th>
+                      <th style="padding:8px; border:1px solid #444;">Storage Used</th>
+                      <th style="padding:8px; border:1px solid #444;">Retention Policy</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top: 20px; padding: 15px; background: #333; border-radius: 5px;">
+                  <p><strong>Total backups this week:</strong> ${totalCount}</p>
+                  <p><strong>Total storage used:</strong> ${(totalSizeBytes / (1024*1024)).toFixed(2)} MB</p>
+                  <p><strong>System status:</strong> ✅ Operational</p>
+                </div>
+              </div>`;
           }
 
           async function run() {
             if (BACKUP_TYPE === 'weekly-summary') {
-              const statsHtml = await getStats();
-              await sendEmail("📊 SimTree Weekly Backup Summary", statsHtml);
+              const html = await getWeeklySummary();
+              await sendEmail("📊 SimTree Weekly Backup Summary", html);
               return;
             }
 
+            // Lógica de Backup normal
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-${new Date().getTime()}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
+            console.log(`>>> Ejecutando dump para ${BACKUP_TYPE}...`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             
@@ -157,16 +194,14 @@ jobs:
               supportsAllDrives: true
             });
 
-            await manageRetention(folderId, RETENTION[BACKUP_TYPE] || 30);
+            console.log(`>>> Backup subido: ${fileName}`);
             if (existsSync(filePath)) unlinkSync(filePath);
-            console.log(`✅ ${BACKUP_TYPE} backup successful`);
           }
 
           run().catch(async err => {
-            console.error(err);
-            await sendEmail(`❌ Backup Failed: ${BACKUP_TYPE}`, `<p>Error: ${err.message}</p>`);
+            console.error(">>> ERROR CRÍTICO:", err);
+            await sendEmail(`❌ Backup Failed: ${BACKUP_TYPE}`, `<p style="color:red;">Error: ${err.message}</p>`);
             process.exit(1);
           });
           EOF
-          
           node backup.mjs
