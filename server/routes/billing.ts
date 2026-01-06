@@ -5,6 +5,8 @@ import { db } from "../db";
 import { eq } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import crypto from "crypto";
+import path from "path";
+import fs from "fs/promises";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -602,6 +604,143 @@ export function registerBillingRoutes(app: Express) {
     } catch (error) {
       console.error("Error fetching invoiceable transactions:", error);
       res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // Get all credit notes (sadmin only)
+  app.get("/api/sadmin/credit-notes", async (req, res) => {
+    try {
+      if (!req.isAuthenticated() || !req.user?.isSuperAdmin) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const creditNotes = await creditNoteService.getAllCreditNotes();
+      res.json(creditNotes);
+    } catch (error) {
+      console.error("Error fetching credit notes:", error);
+      res.status(500).json({ error: "Failed to fetch credit notes" });
+    }
+  });
+
+  // View credit note as PDF (sadmin only)
+  app.get("/api/sadmin/credit-notes/:creditNoteId/view", async (req, res) => {
+    try {
+      if (!req.isAuthenticated() || !req.user?.isSuperAdmin) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const creditNoteId = parseInt(req.params.creditNoteId);
+      if (isNaN(creditNoteId) || creditNoteId <= 0) {
+        return res.status(400).json({ error: "Invalid credit note ID" });
+      }
+
+      // Get credit note with company details and items
+      const [creditNoteData] = await db
+        .select({
+          creditNote: schema.creditNotes,
+          company: schema.companies
+        })
+        .from(schema.creditNotes)
+        .leftJoin(schema.companies, eq(schema.creditNotes.companyId, schema.companies.id))
+        .where(eq(schema.creditNotes.id, creditNoteId));
+
+      if (!creditNoteData) {
+        return res.status(404).json({ error: "Credit note not found" });
+      }
+
+      const { creditNote, company } = creditNoteData;
+      
+      if (!company) {
+        return res.status(404).json({ error: "Company not found for credit note" });
+      }
+
+      // Get credit note items
+      const creditNoteItems = await db
+        .select()
+        .from(schema.creditNoteItems)
+        .where(eq(schema.creditNoteItems.creditNoteId, creditNoteId));
+
+      // Generate PDF using credit note template
+      const { compileTemplate, convertHtmlToPdf } = await import('../services/email');
+      
+      const formattedItems = creditNoteItems.map(item => ({
+        planName: item.planName,
+        planDescription: item.planDescription || '',
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.unitPrice).toFixed(2),
+        totalAmount: parseFloat(item.totalAmount).toFixed(2)
+      }));
+
+      const creditDate = new Date(creditNote.creditDate);
+
+      const templateData = {
+        creditNoteNumber: creditNote.creditNoteNumber,
+        companyName: company.name,
+        companyAddress: company.address || '[Client Business Address]',
+        companyTrn: company.taxNumber || '[Tax Registration Number]',
+        creditDate: creditDate.toLocaleDateString(),
+        reason: creditNote.reason,
+        items: formattedItems,
+        totalAmount: parseFloat(creditNote.totalAmount).toFixed(2),
+        currency: creditNote.currency || 'USD',
+        year: new Date().getFullYear()
+      };
+
+      let html = await compileTemplate('credit-note', templateData);
+      
+      // Embed logo as base64 for PDF viewing
+      try {
+        const logoPath = path.join(__dirname, '../../public/images/logoST.png');
+        const logoBuffer = await fs.readFile(logoPath);
+        const logoBase64 = logoBuffer.toString('base64');
+        const logoDataUrl = `data:image/png;base64,${logoBase64}`;
+        html = html.replace('src="cid:logoST"', `src="${logoDataUrl}"`);
+      } catch (logoError) {
+        console.error('[PDF] Failed to embed logo for credit note:', logoError);
+      }
+      
+      const pdfBuffer = await convertHtmlToPdf(html);
+
+      // Check if this is a download request or inline view
+      const isDownload = req.query.download === 'true';
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      if (isDownload) {
+        res.setHeader('Content-Disposition', `attachment; filename="credit-note-${creditNote.creditNoteNumber}.pdf"`);
+      } else {
+        res.setHeader('Content-Disposition', `inline; filename="credit-note-${creditNote.creditNoteNumber}.pdf"`);
+      }
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.setHeader('Cache-Control', 'no-cache');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating credit note PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+
+  // Resend credit note email (sadmin only)
+  app.post("/api/sadmin/credit-notes/:creditNoteId/resend", async (req, res) => {
+    try {
+      if (!req.isAuthenticated() || !req.user?.isSuperAdmin) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const creditNoteId = parseInt(req.params.creditNoteId);
+      if (isNaN(creditNoteId) || creditNoteId <= 0) {
+        return res.status(400).json({ error: "Invalid credit note ID" });
+      }
+
+      const emailSent = await creditNoteService.sendCreditNoteEmail(creditNoteId);
+      
+      if (emailSent) {
+        res.json({ success: true, message: "Credit note email sent successfully" });
+      } else {
+        res.status(500).json({ error: "Failed to send credit note email" });
+      }
+    } catch (error) {
+      console.error("Error resending credit note email:", error);
+      res.status(500).json({ error: "Failed to resend credit note email" });
     }
   });
 }

@@ -70,6 +70,31 @@ interface CompanyData {
   contactEmail: string;
 }
 
+interface CreditNoteData {
+  id: number;
+  creditNoteNumber: string;
+  creditDate: string;
+  totalAmount: string;
+  currency: string;
+  reason: string;
+  emailSent: boolean;
+  emailSentAt?: string;
+  createdAt: string;
+  company: {
+    id: number;
+    name: string;
+    contactEmail: string;
+  };
+  items: Array<{
+    id: number;
+    planName: string;
+    planDescription?: string;
+    unitPrice: string;
+    quantity: number;
+    totalAmount: string;
+  }>;
+}
+
 interface UninvoicedEsim {
   id: number;
   orderId: string;
@@ -107,6 +132,12 @@ export default function BillingPage() {
   const { data: bills = [], isLoading: billsLoading } = useQuery({
     queryKey: ['/api/sadmin/bills'],
     queryFn: () => apiRequest('/api/sadmin/bills') as Promise<BillData[]>
+  });
+
+  // Fetch all credit notes
+  const { data: creditNotes = [], isLoading: creditNotesLoading } = useQuery({
+    queryKey: ['/api/sadmin/credit-notes'],
+    queryFn: () => apiRequest('/api/sadmin/credit-notes') as Promise<CreditNoteData[]>
   });
 
   // Fetch all companies  
@@ -193,6 +224,26 @@ export default function BillingPage() {
       toast({
         title: "Error",
         description: `Failed to delete bill: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Resend credit note email mutation
+  const resendCreditNoteMutation = useMutation({
+    mutationFn: (creditNoteId: number) => 
+      apiRequest(`/api/sadmin/credit-notes/${creditNoteId}/resend`, { method: 'POST' }),
+    onSuccess: () => {
+      toast({
+        title: "Email Sent",
+        description: "Credit note email has been resent successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/sadmin/credit-notes'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to resend credit note email",
         variant: "destructive",
       });
     }
@@ -545,6 +596,7 @@ export default function BillingPage() {
         <TabsList>
           <TabsTrigger value="receipts">Receipts</TabsTrigger>
           <TabsTrigger value="bills">Bills</TabsTrigger>
+          <TabsTrigger value="credit-notes">Credit Notes</TabsTrigger>
         </TabsList>
         
         <TabsContent value="receipts" className="space-y-4">
@@ -756,6 +808,119 @@ export default function BillingPage() {
             </CardContent>
           </Card>
 
+        </TabsContent>
+
+        <TabsContent value="credit-notes" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Credit Notes</CardTitle>
+              <CardDescription>
+                Credit notes issued for eSIM cancellations and refunds
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {creditNotesLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                </div>
+              ) : creditNotes.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No credit notes found
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Credit Note #</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead>Email Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {creditNotes.map((creditNote) => (
+                      <TableRow key={creditNote.id}>
+                        <TableCell className="font-mono text-sm">
+                          {creditNote.creditNoteNumber}
+                        </TableCell>
+                        <TableCell>{creditNote.company.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
+                            {format(new Date(creditNote.creditDate), 'MMM dd, yyyy')}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {creditNote.reason}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {creditNote.items.length} items
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium text-red-600">
+                          -{formatCurrency(parseFloat(creditNote.totalAmount), creditNote.currency)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            {creditNote.emailSent ? (
+                              <Badge variant="secondary">
+                                <Mail className="w-3 h-3 mr-1" />
+                                Sent
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">
+                                <Mail className="w-3 h-3 mr-1" />
+                                Not sent
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(`/api/sadmin/credit-notes/${creditNote.id}/view`, '_blank')}
+                              data-testid={`button-view-credit-note-${creditNote.id}`}
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(`/api/sadmin/credit-notes/${creditNote.id}/view?download=true`, '_blank')}
+                              data-testid={`button-download-credit-note-${creditNote.id}`}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resendCreditNoteMutation.mutate(creditNote.id)}
+                              disabled={resendCreditNoteMutation.isPending}
+                              data-testid={`button-resend-credit-note-${creditNote.id}`}
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Resend
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
