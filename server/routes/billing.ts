@@ -446,6 +446,13 @@ export function registerBillingRoutes(app: Express) {
 
       const { bill, company } = billData;
       console.log(`[PDF-DEBUG] Bill: ${bill?.billNumber}, Company: ${company?.name}`);
+
+      // If bill has a Drive file ID and not requesting download, redirect to Google Drive
+      if (bill.driveFileId && req.query.download !== 'true') {
+        const driveViewUrl = `https://drive.google.com/file/d/${bill.driveFileId}/view`;
+        console.log(`[PDF-DEBUG] Redirecting to Drive file: ${driveViewUrl}`);
+        return res.redirect(driveViewUrl);
+      }
       
       if (!company) {
         return res.status(404).json({ error: "Company not found for bill" });
@@ -515,6 +522,14 @@ export function registerBillingRoutes(app: Express) {
       
       if (!receipt) {
         return res.status(404).json({ error: "Receipt not found" });
+      }
+
+      // Check for Drive file ID from database
+      const [receiptRecord] = await db.select().from(schema.receipts).where(eq(schema.receipts.id, receiptId));
+      if (receiptRecord?.driveFileId && req.query.download !== 'true') {
+        const driveViewUrl = `https://drive.google.com/file/d/${receiptRecord.driveFileId}/view`;
+        console.log(`[PDF] Redirecting to Drive file: ${driveViewUrl}`);
+        return res.redirect(driveViewUrl);
       }
 
       // Prepare template data for receipt PDF
@@ -664,6 +679,13 @@ export function registerBillingRoutes(app: Express) {
       }
 
       const { creditNote, company } = creditNoteData;
+
+      // If credit note has a Drive file ID and not requesting download, redirect to Google Drive
+      if (creditNote.driveFileId && req.query.download !== 'true') {
+        const driveViewUrl = `https://drive.google.com/file/d/${creditNote.driveFileId}/view`;
+        console.log(`[PDF] Redirecting to Drive file: ${driveViewUrl}`);
+        return res.redirect(driveViewUrl);
+      }
       
       if (!company) {
         return res.status(404).json({ error: "Company not found for credit note" });
