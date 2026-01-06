@@ -234,9 +234,9 @@ Permanent storage of billing documents (receipts, invoices, credit notes) to Goo
 PDFs are only stored when `DATABASE_URL` matches `PROD_DATABASE_URL`, ensuring development data is not uploaded to Google Drive.
 
 ### File Naming Convention
-- Receipts: `RCP-{companyName}-{sequence}.pdf` (e.g., `RCP-AcmeCorp-0001.pdf`)
-- Invoices: `BILL-{companyName}-{sequence}.pdf` (e.g., `BILL-AcmeCorp-0001.pdf`)
-- Credit Notes: `CN-{companyName}-{sequence}.pdf` (e.g., `CN-AcmeCorp-0001.pdf`)
+- Receipts: `RCP-{companyName}-{date}-{sequence}.pdf` (e.g., `RCP-AcmeCorp-20260106-0001.pdf`)
+- Invoices: `BILL-{companyName}-{date}-{sequence}.pdf` (e.g., `BILL-AcmeCorp-20260106-0001.pdf`)
+- Credit Notes: `CN-{companyName}-{date}-{sequence}.pdf` (e.g., `CN-AcmeCorp-20260106-0001.pdf`)
 
 ### Technical Implementation
 - **Service**: `server/services/pdf-storage.service.ts`
