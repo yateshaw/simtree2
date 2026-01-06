@@ -1,10 +1,10 @@
 name: Production Database Backups
 on:
   schedule:
-    - cron: '0 6 * * *'
-    - cron: '0 8 1 * *'
-    - cron: '0 * * * *'
-    - cron: '0 20 * * 5'
+    - cron: '0 6 * * *'     # Diarios
+    - cron: '0 8 1 * *'     # Mensuales
+    - cron: '0 * * * *'     # Por hora
+    - cron: '0 20 * * 5'    # Resumen semanal
   workflow_dispatch:
     inputs:
       backup_type:
@@ -23,10 +23,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
       - name: Install PostgreSQL 17 client
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -34,11 +36,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail google-auth-library
+
+      - name: Determine backup type
+        id: backup-type
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "type=${{ github.event.inputs.backup_type }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" == "0 20 * * 5" ]; then
+            echo "type=weekly-summary" >> $GITHUB_OUTPUT
+          else
+            echo "type=daily" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create and Run Backup Script
         env:
-          BACKUP_TYPE: ${{ steps.backup-type.outputs.type || 'daily' }}
+          BACKUP_TYPE: ${{ steps.backup-type.outputs.type }}
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
@@ -58,11 +73,12 @@ jobs:
           const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, NOTIFICATION_EMAIL, FROM_EMAIL } = process.env;
           const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
 
-          const auth = new google.auth.GoogleAuth({
-            credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON),
-            scopes: ['https://www.googleapis.com/auth/drive']
-          });
-          const drive = google.drive({ version: 'v3', auth });
+          function getAuth() {
+            return new google.auth.GoogleAuth({
+              credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON),
+              scopes: ['https://www.googleapis.com/auth/drive']
+            });
+          }
 
           async function sendEmail(subject, html) {
             try {
@@ -72,13 +88,16 @@ jobs:
                 body: JSON.stringify({
                   personalizations: [{ to: [{ email: NOTIFICATION_EMAIL }] }],
                   from: { email: FROM_EMAIL, name: 'SimTree Backup' },
-                  subject, content: [{ type: 'text/html', value: html }]
+                  subject,
+                  content: [{ type: 'text/html', value: html }]
                 })
               });
-            } catch (e) { console.error("Email error:", e.message); }
+            } catch (e) { console.error("Email failed:", e.message); }
           }
 
           async function run() {
+            const drive = google.drive({ version: 'v3', auth: getAuth() });
+
             if (BACKUP_TYPE === 'weekly-summary') {
               let rows = "";
               const folders = [
@@ -90,9 +109,9 @@ jobs:
                 const res = await drive.files.list({ q: `'${f.id}' in parents and trashed=false`, fields: 'files(id, size)', pageSize: 1000, supportsAllDrives: true, includeItemsFromAllDrives: true });
                 const files = res.data.files || [];
                 const sizeMB = (files.reduce((a, b) => a + parseInt(b.size || 0), 0) / (1024*1024)).toFixed(2);
-                rows += `<tr><td>${f.name}</td><td>${files.length}</td><td>${sizeMB} MB</td><td>${f.pol}</td></tr>`;
+                rows += `<tr><td style="padding:8px;border:1px solid #444">${f.name}</td><td style="padding:8px;border:1px solid #444">${files.length}</td><td style="padding:8px;border:1px solid #444">${sizeMB} MB</td><td style="padding:8px;border:1px solid #444">${f.pol}</td></tr>`;
               }
-              await sendEmail("📊 SimTree Status", `<table>${rows}</table>`);
+              await sendEmail("📊 SimTree Status Report", `<div style="font-family:sans-serif;background:#1a1a1a;color:#fff;padding:20px"><h2>📊 Backup Summary</h2><table style="width:100%;border-collapse:collapse;background:#2d2d2d"><thead><tr style="background:#444"><th>Type</th><th>Total Files</th><th>Size</th><th>Policy</th></tr></thead><tbody>${rows}</tbody></table></div>`);
               return;
             }
 
@@ -100,50 +119,39 @@ jobs:
             const fileName = `simtree-${BACKUP_TYPE}-${Date.now()}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
-            console.log(`>>> Creando backup: ${fileName}`);
+            console.log(`>>> Iniciando Backup: ${BACKUP_TYPE}`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
             
-            await drive.files.create({ 
-              requestBody: { name: fileName, parents: [folderId] }, 
-              media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, 
-              supportsAllDrives: true 
-            });
+            await drive.files.create({ requestBody: { name: fileName, parents: [folderId] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
 
-            console.log(">>> Verificando archivos para borrar...");
-            const listRes = await drive.files.list({ 
-              q: `'${folderId}' in parents and trashed=false`, 
-              orderBy: 'createdTime asc', 
-              pageSize: 1000, 
-              fields: 'files(id, name)', 
-              supportsAllDrives: true, 
-              includeItemsFromAllDrives: true 
-            });
-
-            let files = listRes.data.files || [];
-            const limit = RETENTION[BACKUP_TYPE];
-
-            if (files.length > limit) {
-              const toDelete = files.slice(0, files.length - limit);
-              console.log(`>>> Se encontraron ${files.length} archivos. Eliminando permanentemente ${toDelete.length}...`);
+            console.log(">>> Analizando limpieza...");
+            const res = await drive.files.list({ q: `'${folderId}' in parents and trashed=false`, orderBy: 'createdTime asc', pageSize: 1000, fields: 'files(id, name)', supportsAllDrives: true, includeItemsFromAllDrives: true });
+            const files = res.data.files || [];
+            
+            if (files.length > RETENTION[BACKUP_TYPE]) {
+              const toDelete = files.slice(0, files.length - RETENTION[BACKUP_TYPE]);
+              console.log(`>>> Se detectaron ${files.length} archivos. Eliminando ${toDelete.length} antiguos...`);
               
+              let count = 0;
               for (const file of toDelete) {
                 try {
-                  // drive.files.delete elimina permanentemente (no va a la papelera)
                   await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                  count++;
+                  if (count % 25 === 0) console.log(`>>> Progreso: ${count}/${toDelete.length} eliminados...`);
                 } catch (e) {
-                  console.error(`Error borrando ${file.name}: ${e.message}`);
+                  if (e.code === 404) console.log(`>>> Archivo ya eliminado (fantasma): ${file.name}`);
+                  else console.error(`>>> Error en ${file.name}: ${e.message}`);
                 }
               }
-              
-              // Verificación final
-              const finalCheck = await drive.files.list({ q: `'${folderId}' in parents and trashed=false`, supportsAllDrives: true, includeItemsFromAllDrives: true });
-              console.log(`>>> Verificación: Ahora quedan ${(finalCheck.data.files || []).length} archivos en la carpeta.`);
+              console.log(`>>> Limpieza terminada.`);
             }
 
+            const finalCheck = await drive.files.list({ q: `'${folderId}' in parents and trashed=false`, fields: 'files(id)', pageSize: 1000, supportsAllDrives: true, includeItemsFromAllDrives: true });
+            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos en la carpeta ${BACKUP_TYPE}.`);
+
             if (existsSync(filePath)) unlinkSync(filePath);
-            console.log(">>> ✅ Hecho.");
           }
           run().catch(e => { console.error(e); process.exit(1); });
           EOF
