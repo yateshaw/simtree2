@@ -575,6 +575,7 @@ export const receipts = pgTable("receipts", {
   transactionId: integer("transaction_id").references(() => walletTransactions.id),
   emailSent: boolean("email_sent").notNull().default(false),
   emailSentAt: timestamp("email_sent_at"),
+  driveFileId: text("drive_file_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -587,6 +588,7 @@ export const bills = pgTable("bills", {
   currency: text("currency").notNull().default("USD"),
   emailSent: boolean("email_sent").notNull().default(false),
   emailSentAt: timestamp("email_sent_at"),
+  driveFileId: text("drive_file_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -617,6 +619,7 @@ export const creditNotes = pgTable("credit_notes", {
   reason: text("reason").notNull().default("eSIM cancellation"),
   emailSent: boolean("email_sent").notNull().default(false),
   emailSentAt: timestamp("email_sent_at"),
+  driveFileId: text("drive_file_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
