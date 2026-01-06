@@ -55,7 +55,7 @@ jobs:
           import { promisify } from 'util';
           const execAsync = promisify(exec);
 
-          const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, NOTIFICATION_EMAIL, FROM_EMAIL } = process.env;
+          const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY } = process.env;
           const RETENTION = { daily: 30, monthly: 12, hourly: 48 };
 
           const auth = new google.auth.GoogleAuth({
@@ -65,11 +65,6 @@ jobs:
           const drive = google.drive({ version: 'v3', auth });
 
           async function run() {
-            if (BACKUP_TYPE === 'weekly-summary') {
-              // Lógica de reporte omitida para brevedad, pero mantenida en tu flujo real
-              return;
-            }
-
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-${Date.now()}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
@@ -85,58 +80,58 @@ jobs:
               supportsAllDrives: true 
             });
 
-            console.log(">>> Analizando archivos en Drive...");
-            const listRes = await drive.files.list({ 
-              q: `'${folderId}' in parents and trashed=false`, 
-              orderBy: 'createdTime asc', 
-              pageSize: 1000, 
-              fields: 'files(id, name)', 
-              supportsAllDrives: true, 
-              includeItemsFromAllDrives: true 
-            });
+            console.log(">>> Iniciando limpieza profunda de archivos...");
+            let continueCleaning = true;
+            let totalDeleted = 0;
 
-            let files = listRes.data.files || [];
-            const limit = RETENTION[BACKUP_TYPE];
+            while (continueCleaning) {
+              const listRes = await drive.files.list({ 
+                q: `'${folderId}' in parents and trashed=false`, 
+                orderBy: 'createdTime asc', 
+                pageSize: 1000, 
+                fields: 'files(id, name)', 
+                supportsAllDrives: true, 
+                includeItemsFromAllDrives: true 
+              });
 
-            if (files.length > limit) {
-              const toDelete = files.slice(0, files.length - limit);
-              console.log(`>>> Se encontraron ${files.length} archivos. Limpiando ${toDelete.length}...`);
-              
-              let deleted = 0;
-              for (const file of toDelete) {
-                let success = false;
-                let attempts = 0;
-                while (!success && attempts < 3) {
+              let files = listRes.data.files || [];
+              const limit = RETENTION[BACKUP_TYPE];
+
+              if (files.length > limit) {
+                const toDelete = files.slice(0, files.length - limit);
+                console.log(`>>> Detectados ${files.length} archivos. Borrando tanda de ${toDelete.length}...`);
+                
+                for (const file of toDelete) {
                   try {
                     await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
-                    success = true;
-                    deleted++;
-                    if (deleted % 20 === 0) console.log(`>>> Progreso: ${deleted}/${toDelete.length} procesados...`);
+                    totalDeleted++;
                   } catch (e) {
                     if (e.code === 404) {
-                      console.log(`>>> Removido de la lista (fantasma): ${file.name}`);
-                      success = true;
+                      // Ignorar fantasmas, ya no están
                     } else if (e.code === 403 || e.code === 429) {
-                      console.log(`>>> Límite de Google alcanzado. Esperando 3 segundos...`);
-                      await new Promise(r => setTimeout(r, 3000));
-                      attempts++;
+                      console.log(">>> Límite de velocidad. Esperando 5s...");
+                      await new Promise(r => setTimeout(r, 5000));
                     } else {
                       console.error(`>>> Error en ${file.name}: ${e.message}`);
-                      break; 
                     }
                   }
                 }
+                // Pausa breve para dejar que el índice de Google respire
+                console.log(">>> Tanda completada. Verificando si quedan más...");
+                await new Promise(r => setTimeout(r, 2000));
+              } else {
+                continueCleaning = false;
               }
             }
 
-            // Verificación final forzada
+            console.log(`>>> Limpieza finalizada. Total eliminados en esta sesión: ${totalDeleted}`);
             const finalCheck = await drive.files.list({ 
               q: `'${folderId}' in parents and trashed=false`, 
               supportsAllDrives: true, 
               includeItemsFromAllDrives: true,
               fields: 'files(id)' 
             });
-            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos reales en ${BACKUP_TYPE}.`);
+            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos reales.`);
 
             if (existsSync(filePath)) unlinkSync(filePath);
             console.log(">>> ✅ Proceso terminado.");
