@@ -204,3 +204,41 @@ A comprehensive three-tier backup system for disaster recovery and data protecti
 - Daily: `simtree-backup-YYYYMMDD-HHMMSS.sql.gz`
 - Hourly: `simtree-hourly-backup-YYYYMMDD-HHMMSS.sql.gz`
 - Schema: `simtree-schema-backup-YYYYMMDD-HHMMSS.sql.gz`
+
+## Billing PDF Storage (January 2026)
+
+Permanent storage of billing documents (receipts, invoices, credit notes) to Google Drive shared unit "Simtree billing".
+
+### Document Types & Timing
+
+| Document Type | When Generated | Storage Timing |
+|---------------|----------------|----------------|
+| Receipts | Immediately on credit addition | Stored immediately |
+| Invoices | End of day (daily billing job) | Stored when email sent |
+| Credit Notes | End of day (daily credit note job) | Stored when email sent |
+
+### Google Drive Folder Structure
+- **Shared Unit**: Simtree billing
+- **RECEIPTS folder**: Stores receipt PDFs
+- **INVOICES folder**: Stores invoice PDFs
+- **CREDIT NOTES folder**: Stores credit note PDFs
+
+### Configuration (Environment Variables)
+- `RECEIPTS_DRIVE_FOLDER_ID`: Folder ID for receipts
+- `INVOICES_DRIVE_FOLDER_ID`: Folder ID for invoices
+- `CREDIT_NOTES_DRIVE_FOLDER_ID`: Folder ID for credit notes
+- `GOOGLE_SERVICE_ACCOUNT_JSON`: Service account credentials (shared with backup system)
+- `PROD_DATABASE_URL`: Production database URL (used for production detection)
+
+### Production-Only Behavior
+PDFs are only stored when `DATABASE_URL` matches `PROD_DATABASE_URL`, ensuring development data is not uploaded to Google Drive.
+
+### File Naming Convention
+- Receipts: `{receiptNumber}_{companyName}.pdf`
+- Invoices: `{billNumber}_{companyName}.pdf`
+- Credit Notes: `{creditNoteNumber}_{companyName}.pdf`
+
+### Technical Implementation
+- **Service**: `server/services/pdf-storage.service.ts`
+- **Integration**: Calls from `server/services/email.ts` after PDF generation
+- **Storage**: Uses existing `driveService` with `supportsAllDrives` for Shared Drive access
