@@ -48,7 +48,7 @@ jobs:
           elif [ "${{ github.event.schedule }}" == "0 20 * * 5" ]; then
             echo "type=weekly-summary" >> $GITHUB_OUTPUT
           else
-            echo "type=${{ github.event.inputs.backup_type || 'daily' }}" >> $GITHUB_OUTPUT
+            echo "type=daily" >> $GITHUB_OUTPUT
           fi
 
       - name: Create and Run Backup Script
@@ -60,8 +60,9 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
           GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
-          BACKUP_NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
+          # Mapeo corregido según tus Secrets de GitHub
+          FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
         run: |
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
@@ -73,7 +74,7 @@ jobs:
           const { BACKUP_TYPE, DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY, GOOGLE_DRIVE_FOLDER_ID_HOURLY, SENDGRID_API_KEY, NOTIFICATION_EMAIL, FROM_EMAIL } = process.env;
 
           async function sendEmail(subject, html) {
-            console.log(`>>> Intentando enviar email: "${subject}" a ${NOTIFICATION_EMAIL}`);
+            console.log(`>>> Enviando email a: ${NOTIFICATION_EMAIL} desde ${FROM_EMAIL}`);
             try {
               const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
                 method: 'POST',
@@ -89,15 +90,9 @@ jobs:
                 })
               });
               
-              if (res.ok) {
-                console.log(">>> ✅ SendGrid aceptó el mensaje.");
-              } else {
-                const errBody = await res.text();
-                console.error(`>>> ❌ Error de SendGrid (${res.status}):`, errBody);
-              }
-            } catch (e) {
-              console.error(">>> ❌ Error fatal en fetch de email:", e.message);
-            }
+              if (res.ok) console.log(">>> ✅ Email enviado exitosamente.");
+              else console.error(`>>> ❌ Error SendGrid (${res.status}):`, await res.text());
+            } catch (e) { console.error(">>> ❌ Error fatal email:", e.message); }
           }
 
           function getAuth() {
@@ -108,7 +103,6 @@ jobs:
           }
 
           async function getWeeklySummary() {
-            console.log(">>> Generando resumen semanal...");
             const drive = google.drive({ version: 'v3', auth: getAuth() });
             const folders = [
               { name: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, policy: '30 backups' },
@@ -148,8 +142,7 @@ jobs:
             return `
               <div style="font-family: sans-serif; background: #1a1a1a; color: #fff; padding: 20px;">
                 <h2 style="color: #4caf50;">📊 SimTree Weekly Backup Summary</h2>
-                <p>Report Date: ${new Date().toISOString()}</p>
-                <table style="width:100%; border-collapse: collapse; text-align: left; background: #2d2d2d; color: #eee;">
+                <table style="width:100%; border-collapse: collapse; background: #2d2d2d; color: #eee;">
                   <thead>
                     <tr style="background: #444;">
                       <th style="padding:8px; border:1px solid #444;">Type</th>
@@ -161,11 +154,7 @@ jobs:
                   </thead>
                   <tbody>${rows}</tbody>
                 </table>
-                <div style="margin-top: 20px; padding: 15px; background: #333; border-radius: 5px;">
-                  <p><strong>Total backups this week:</strong> ${totalCount}</p>
-                  <p><strong>Total storage used:</strong> ${(totalSizeBytes / (1024*1024)).toFixed(2)} MB</p>
-                  <p><strong>System status:</strong> ✅ Operational</p>
-                </div>
+                <p><strong>System status:</strong> ✅ Operational</p>
               </div>`;
           }
 
@@ -176,12 +165,10 @@ jobs:
               return;
             }
 
-            // Lógica de Backup normal
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
             const fileName = `simtree-${BACKUP_TYPE}-${new Date().getTime()}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
-            console.log(`>>> Ejecutando dump para ${BACKUP_TYPE}...`);
             let cmd = `/usr/lib/postgresql/17/bin/pg_dump "${DATABASE_URL}" --no-owner --no-acl`;
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             
@@ -194,13 +181,13 @@ jobs:
               supportsAllDrives: true
             });
 
-            console.log(`>>> Backup subido: ${fileName}`);
             if (existsSync(filePath)) unlinkSync(filePath);
+            console.log(`✅ ${BACKUP_TYPE} backup exitoso`);
           }
 
           run().catch(async err => {
-            console.error(">>> ERROR CRÍTICO:", err);
-            await sendEmail(`❌ Backup Failed: ${BACKUP_TYPE}`, `<p style="color:red;">Error: ${err.message}</p>`);
+            console.error(err);
+            await sendEmail(`❌ Backup Failed: ${BACKUP_TYPE}`, `<p>Error: ${err.message}</p>`);
             process.exit(1);
           });
           EOF
