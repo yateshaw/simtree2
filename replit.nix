@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.chromium
     pkgs.systemd
     pkgs.xorg.libXext
     pkgs.libxkbcommon

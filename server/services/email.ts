@@ -47,10 +47,41 @@ export async function convertHtmlToPdf(html: string): Promise<Buffer> {
   let browser = null;
   try {
     console.log('[PDF] Launching Puppeteer browser for PDF generation');
+    
+    // Try to find Chrome executable - works in both dev and production
+    let executablePath: string | undefined;
+    
+    // Check common Chrome locations
+    const chromePaths = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium',
+      '/home/runner/.cache/puppeteer/chrome/linux-140.0.7339.80/chrome-linux64/chrome',
+      puppeteer.executablePath(),
+    ].filter(Boolean);
+    
+    for (const chromePath of chromePaths) {
+      if (chromePath) {
+        try {
+          const fs = await import('fs');
+          if (fs.existsSync(chromePath)) {
+            executablePath = chromePath;
+            console.log(`[PDF] Found Chrome at: ${chromePath}`);
+            break;
+          }
+        } catch (e) {
+          // Path doesn't exist, try next
+        }
+      }
+    }
+    
+    if (!executablePath) {
+      console.log('[PDF] No Chrome path found, letting Puppeteer detect automatically');
+    }
+    
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: '/home/runner/.cache/puppeteer/chrome/linux-140.0.7339.80/chrome-linux64/chrome',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      executablePath: executablePath,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     });
     
     const page = await browser.newPage();
