@@ -64,8 +64,17 @@ class DriveService {
       const defaultFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || process.env.DRIVE_FOLDER_ID;
       const targetFolderId = folderId || defaultFolderId;
       
+      // Sanitize folder IDs - remove any newlines or whitespace that may have been added accidentally
+      // Note: Some folder IDs legitimately end with a dash, so only remove newlines and trailing whitespace
+      const sanitizeFolderId = (id: string) => id.replace(/\\n-$/, '').replace(/[\n\r]+/g, '').trim();
+      
       // Use parents if provided, otherwise use targetFolderId
-      const parentFolders = parents || (targetFolderId ? [targetFolderId] : undefined);
+      let parentFolders = parents || (targetFolderId ? [targetFolderId] : undefined);
+      
+      // Sanitize all folder IDs
+      if (parentFolders) {
+        parentFolders = parentFolders.map(id => sanitizeFolderId(id));
+      }
       
       if (!parentFolders) {
         throw new Error('GOOGLE_DRIVE_FOLDER_ID environment variable not set and no parents provided');
