@@ -435,7 +435,8 @@ export async function generateInvoiceHTML(
   // If embedLogo is true, replace cid:logoST with base64 data URL for PDF viewing
   if (embedLogo) {
     try {
-      const logoPath = path.join(__dirname, '../../public/images/logoST.png');
+      const logoPath = path.join(process.cwd(), 'public/images/logoST.png');
+      console.log(`[Email] Looking for logo at: ${logoPath}`);
       const logoBuffer = await fs.readFile(logoPath);
       const logoBase64 = logoBuffer.toString('base64');
       const logoDataUrl = `data:image/png;base64,${logoBase64}`;
