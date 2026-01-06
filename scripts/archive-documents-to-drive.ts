@@ -172,6 +172,9 @@ async function archiveReceipts() {
 
       const fileId = await uploadToDrive(pdfBuffer, fileName, RECEIPTS_FOLDER_ID);
       if (fileId) {
+        await db.update(schema.receipts)
+          .set({ driveFileId: fileId })
+          .where(eq(schema.receipts.id, receipt.id));
         console.log(`[Archive] ✓ Receipt ${receipt.receiptNumber} -> ${fileName}`);
         success++;
       } else {
@@ -319,6 +322,9 @@ async function archiveInvoices() {
 
       const fileId = await uploadToDrive(pdfBuffer, fileName, INVOICES_FOLDER_ID);
       if (fileId) {
+        await db.update(schema.bills)
+          .set({ driveFileId: fileId })
+          .where(eq(schema.bills.id, bill.id));
         console.log(`[Archive] ✓ Invoice ${bill.billNumber} -> ${fileName}`);
         success++;
       } else {
@@ -390,6 +396,9 @@ async function archiveCreditNotes() {
 
       const fileId = await uploadToDrive(pdfBuffer, fileName, CREDIT_NOTES_FOLDER_ID);
       if (fileId) {
+        await db.update(schema.creditNotes)
+          .set({ driveFileId: fileId })
+          .where(eq(schema.creditNotes.id, creditNote.id));
         console.log(`[Archive] ✓ Credit Note ${creditNote.creditNoteNumber} -> ${fileName}`);
         success++;
       } else {
