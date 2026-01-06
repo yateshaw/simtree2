@@ -44,9 +44,6 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID_DAILY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
           GOOGLE_DRIVE_FOLDER_ID_MONTHLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
           GOOGLE_DRIVE_FOLDER_ID_HOURLY: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_HOURLY }}
-          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
-          NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
         run: |
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
@@ -66,7 +63,7 @@ jobs:
 
           async function run() {
             const folderId = BACKUP_TYPE === 'hourly' ? GOOGLE_DRIVE_FOLDER_ID_HOURLY : (BACKUP_TYPE === 'monthly' ? GOOGLE_DRIVE_FOLDER_ID_MONTHLY : GOOGLE_DRIVE_FOLDER_ID_DAILY);
-            const fileName = `simtree-${BACKUP_TYPE}-${Date.now()}.sql.gz`;
+            const fileName = `simtree-${BACKUP_TYPE}-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
             
             console.log(`>>> Iniciando Backup: ${BACKUP_TYPE}`);
@@ -74,13 +71,14 @@ jobs:
             if (BACKUP_TYPE === 'hourly') cmd += ` -t wallets -t wallet_transactions -t purchased_esims`;
             await execAsync(`${cmd} | gzip -9 > ${filePath}`);
             
+            console.log(`>>> Subiendo nuevo archivo: ${fileName}`);
             await drive.files.create({ 
               requestBody: { name: fileName, parents: [folderId] }, 
               media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, 
               supportsAllDrives: true 
             });
 
-            console.log(">>> Iniciando limpieza profunda de archivos...");
+            console.log(">>> Iniciando limpieza profunda (usando papelera para forzar borrado)...");
             let continueCleaning = true;
             let totalDeleted = 0;
 
@@ -88,7 +86,7 @@ jobs:
               const listRes = await drive.files.list({ 
                 q: `'${folderId}' in parents and trashed=false`, 
                 orderBy: 'createdTime asc', 
-                pageSize: 1000, 
+                pageSize: 100, 
                 fields: 'files(id, name)', 
                 supportsAllDrives: true, 
                 includeItemsFromAllDrives: true 
@@ -99,43 +97,47 @@ jobs:
 
               if (files.length > limit) {
                 const toDelete = files.slice(0, files.length - limit);
-                console.log(`>>> Detectados ${files.length} archivos. Borrando tanda de ${toDelete.length}...`);
+                console.log(`>>> Detectados ${files.length} archivos. Moviendo a papelera ${toDelete.length}...`);
                 
                 for (const file of toDelete) {
                   try {
-                    await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                    // Marcamos como basura (esto funciona mejor con archivos de otros dueños)
+                    await drive.files.update({ 
+                      fileId: file.id, 
+                      requestBody: { trashed: true },
+                      supportsAllDrives: true 
+                    });
                     totalDeleted++;
                   } catch (e) {
-                    if (e.code === 404) {
-                      // Ignorar fantasmas, ya no están
-                    } else if (e.code === 403 || e.code === 429) {
-                      console.log(">>> Límite de velocidad. Esperando 5s...");
+                    if (e.code === 404) continue;
+                    if (e.code === 403 || e.code === 429) {
+                      console.log(">>> Límite de API. Esperando 5s...");
                       await new Promise(r => setTimeout(r, 5000));
                     } else {
                       console.error(`>>> Error en ${file.name}: ${e.message}`);
                     }
                   }
                 }
-                // Pausa breve para dejar que el índice de Google respire
-                console.log(">>> Tanda completada. Verificando si quedan más...");
+                console.log(">>> Tanda completada. Verificando si Google soltó más archivos...");
                 await new Promise(r => setTimeout(r, 2000));
               } else {
                 continueCleaning = false;
               }
             }
 
-            console.log(`>>> Limpieza finalizada. Total eliminados en esta sesión: ${totalDeleted}`);
+            console.log(`>>> Limpieza finalizada. Total removidos: ${totalDeleted}`);
             const finalCheck = await drive.files.list({ 
               q: `'${folderId}' in parents and trashed=false`, 
               supportsAllDrives: true, 
               includeItemsFromAllDrives: true,
               fields: 'files(id)' 
             });
-            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos reales.`);
+            console.log(`>>> VERIFICACIÓN FINAL: Quedan ${(finalCheck.data.files || []).length} archivos activos.`);
 
             if (existsSync(filePath)) unlinkSync(filePath);
             console.log(">>> ✅ Proceso terminado.");
           }
+
           run().catch(e => { console.error(e); process.exit(1); });
           EOF
           node backup.mjs
