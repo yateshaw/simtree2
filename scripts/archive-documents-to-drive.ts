@@ -134,6 +134,31 @@ async function archiveReceipts() {
   console.log(`[Archive] Receipts: ${success} success, ${failed} failed`);
 }
 
+async function migrateBillNumbers() {
+  console.log('\n========== MIGRATING BILL NUMBERS ==========');
+  
+  const bills = await db.select().from(schema.bills);
+  let migrated = 0;
+
+  for (const bill of bills) {
+    // Check if bill number has old format (BILL-YYYYMMDD-XXXX)
+    const oldFormatMatch = bill.billNumber.match(/^BILL-\d{8}-(\d+)$/);
+    if (oldFormatMatch) {
+      const sequence = oldFormatMatch[1];
+      const newBillNumber = `BILL-${sequence}`;
+      
+      await db.update(schema.bills)
+        .set({ billNumber: newBillNumber })
+        .where(eq(schema.bills.id, bill.id));
+      
+      console.log(`[Migrate] ${bill.billNumber} -> ${newBillNumber}`);
+      migrated++;
+    }
+  }
+
+  console.log(`[Migrate] Migrated ${migrated} bill numbers to new format`);
+}
+
 async function archiveInvoices() {
   if (!INVOICES_FOLDER_ID) {
     console.log('[Archive] INVOICES_DRIVE_FOLDER_ID not set, skipping invoices');
@@ -207,12 +232,16 @@ async function archiveInvoices() {
       html = await embedLogoInHtml(html);
       const pdfBuffer = await convertHtmlToPdf(html);
 
+      // Use bill's createdAt date for the filename, not from the bill number
       const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
-      const parts = bill.billNumber.split('-');
-      const prefix = parts[0];
-      const date = parts.length >= 3 ? parts[1] : '';
-      const sequence = parts.length >= 3 ? parts[parts.length - 1] : parts[1] || '0001';
-      const fileName = `${prefix}-${sanitizedCompanyName}-${date}-${sequence}.pdf`;
+      const createdDate = new Date(bill.createdAt!);
+      const dateStr = `${createdDate.getFullYear()}${String(createdDate.getMonth() + 1).padStart(2, '0')}${String(createdDate.getDate()).padStart(2, '0')}`;
+      
+      // Extract sequence from bill number (BILL-0001 -> 0001)
+      const sequenceMatch = bill.billNumber.match(/BILL-(\d+)$/);
+      const sequence = sequenceMatch ? sequenceMatch[1] : '0001';
+      
+      const fileName = `BILL-${sanitizedCompanyName}-${dateStr}-${sequence}.pdf`;
 
       const fileId = await uploadToDrive(pdfBuffer, fileName, INVOICES_FOLDER_ID);
       if (fileId) {
@@ -311,6 +340,10 @@ async function main() {
   console.log(`Credit Notes Folder: ${CREDIT_NOTES_FOLDER_ID ? 'Configured' : 'NOT SET'}`);
 
   try {
+    // Step 1: Migrate bill numbers from old format (BILL-YYYYMMDD-XXXX) to new format (BILL-XXXX)
+    await migrateBillNumbers();
+    
+    // Step 2: Archive all documents to Google Drive
     await archiveReceipts();
     await archiveInvoices();
     await archiveCreditNotes();

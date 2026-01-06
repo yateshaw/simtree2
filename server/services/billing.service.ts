@@ -45,48 +45,33 @@ export class BillingService {
 
   /**
    * Generate a unique bill number
+   * Format: BILL-0001 (sequential, no date in the number)
    */
   private async generateBillNumber(): Promise<string> {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    
-    // Find the latest bill for today
+    // Find the latest bill globally to get the next sequence number
     const latestBill = await db
       .select()
       .from(schema.bills)
-      .where(
-        gte(schema.bills.createdAt, new Date(today.getFullYear(), today.getMonth(), today.getDate()))
-      )
       .orderBy(desc(schema.bills.id))
       .limit(1);
     
     const sequence = latestBill.length > 0 ? latestBill[0].id + 1 : 1;
-    return `BILL-${year}${month}${day}-${String(sequence).padStart(4, '0')}`;
+    return `BILL-${String(sequence).padStart(4, '0')}`;
   }
 
   /**
    * Get the next bill number that would be generated
    */
   async getNextBillNumber(): Promise<string> {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    
-    // Find the latest bill for today
+    // Find the latest bill globally to get the next sequence number
     const latestBill = await db
       .select()
       .from(schema.bills)
-      .where(
-        gte(schema.bills.createdAt, new Date(today.getFullYear(), today.getMonth(), today.getDate()))
-      )
       .orderBy(desc(schema.bills.id))
       .limit(1);
     
     const sequence = latestBill.length > 0 ? latestBill[0].id + 1 : 1;
-    return `BILL-${year}${month}${day}-${String(sequence).padStart(4, '0')}`;
+    return `BILL-${String(sequence).padStart(4, '0')}`;
   }
 
   /**
