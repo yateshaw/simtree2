@@ -288,11 +288,16 @@ async function archiveInvoices() {
       const billingDate = new Date(bill.billingDate);
       const dueDate = new Date(billingDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+      // Build full address with country
+      const fullAddress = company?.address 
+        ? (company?.country ? `${company.address}, ${company.country}` : company.address)
+        : '[Client Business Address]';
+      
       const invoiceTemplateData = {
         billNumber: bill.billNumber,
         companyName: company?.name || 'Unknown',
-        companyAddress: company?.address || '[Client Business Address]',
-        companyTrn: company?.taxNumber || '[Tax Registration Number]',
+        companyAddress: fullAddress,
+        companyTrn: company?.taxNumber || 'Not provided',
         billingDate: billingDate.toLocaleDateString(),
         dueDate: dueDate.toLocaleDateString(),
         subtotalAmount: subtotal.toFixed(2),
