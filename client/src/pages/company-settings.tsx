@@ -172,6 +172,10 @@ export default function CompanySettings() {
   });
 
   const onSubmit = (data: CompanySettingsFormData) => {
+    // Auto-prepend https:// to website if not present
+    if (data.website && !data.website.startsWith('http://') && !data.website.startsWith('https://')) {
+      data.website = `https://${data.website}`;
+    }
     updateSettingsMutation.mutate(data);
   };
 

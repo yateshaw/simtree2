@@ -440,8 +440,15 @@ export default function CompleteProfileEnhanced() {
         return;
       }
 
+      // Auto-prepend https:// to website if not present
+      let website = rest.website;
+      if (website && !website.startsWith('http://') && !website.startsWith('https://')) {
+        website = `https://${website}`;
+      }
+
       companyProfileMutation.mutate({ 
         ...rest,
+        website,
         phoneCountryCode,
         phoneNumber: parsed.number, // E.164
         userId
