@@ -1,0 +1,116 @@
+2026-01-07 20:00:01.27
+b211afee
+User
+[Server] [Sync] Starting scheduled eSIM status sync (backup for missed webhooks)...
+2026-01-07 20:00:01.39
+5326b36f
+User
+[Server] [Sync] Starting scheduled eSIM status sync (backup for missed webhooks)...
+2026-01-07 20:00:01.59
+5326b36f
+User
+[Sync] Starting eSIM status synchronization
+2026-01-07 20:00:01.99
+5326b36f
+User
+[Sync] Found 2 eSIMs to check for status updates
+2026-01-07 20:00:01.99
+5326b36f
+User
+[Sync] Checking provider status for eSIM 5 (B26010113430012)
+2026-01-07 20:00:03.57
+b211afee
+User
+Database client connected
+2026-01-07 20:00:03.66
+b211afee
+User
+Database client connected
+2026-01-07 20:00:03.87
+b211afee
+User
+[Sync] Found 2 eSIMs to check for status updates
+2026-01-07 20:00:03.87
+b211afee
+User
+[Sync] Checking provider status for eSIM 5 (B26010113430012)
+2026-01-07 20:00:03.87
+b211afee
+User
+[Credit Note Scheduler] DRY RUN: Processing cancelled eSIMs on 2026-01-07
+2026-01-07 20:00:03.87
+b211afee
+User
+[Billing Scheduler] No new eSIMs to bill today
+2026-01-07 20:00:03.99
+5326b36f
+User
+[Sync] Checking provider status for eSIM 6 (B26010113450001)
+2026-01-07 20:00:03.99
+5326b36f
+User
+[Sync] Provider data for eSIM 5: esimStatus=undefined, smdpStatus=undefined, usage=0/0
+2026-01-07 20:00:05.17
+b211afee
+User
+[Sync] Provider data for eSIM 6: esimStatus=undefined, smdpStatus=undefined, usage=0/0
+2026-01-07 20:00:05.29
+5326b36f
+User
+[Sync] Provider data for eSIM 6: esimStatus=undefined, smdpStatus=undefined, usage=0/0
+2026-01-07 20:00:05.30
+b211afee
+User
+[Sync] Checking 1 activated eSIMs for expiration/depletion
+2026-01-07 20:00:05.39
+5326b36f
+User
+[Sync] Checking 1 activated eSIMs for expiration/depletion
+2026-01-07 20:00:06.27
+b211afee
+User
+[Sync] Checking 3 expired eSIMs for providerStatus sync
+2026-01-07 20:00:06.59
+5326b36f
+User
+[Sync] Checking 3 expired eSIMs for providerStatus sync
+2026-01-07 20:00:07.08
+b211afee
+User
+[Server] [Sync] eSIM status sync complete - no updates needed
+2026-01-07 20:00:07.08
+b211afee
+User
+[Sync] eSIM synchronization complete, updated 0 eSIMs
+2026-01-07 20:00:10.59
+5326b36f
+User
+[Server] [Sync] eSIM status sync complete - no updates needed
+2026-01-07 20:00:10.59
+5326b36f
+User
+[Sync] eSIM synchronization complete, updated 0 eSIMs
+2026-01-07 20:00:30.70
+5326b36f
+User
+NODE_ENV: production
+2026-01-07 20:00:30.70
+5326b36f
+User
+DEV_DATABASE_URL exists: true
+2026-01-07 20:00:30.70
+5326b36f
+User
+URL: postgresql://neo***:****@ep-small-sunset-a4rktold-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+2026-01-07 20:00:30.70
+5326b36f
+User
+PROD_DATABASE_URL exists: true
+2026-01-07 20:00:30.70
+5326b36f
+User
+🚀 Using PRODUCTION database (source: PROD_DATABASE_URL)
+2026-01-07 20:00:30.70
+5326b36f
+User
+[DB Config] Environment diagnostics:
