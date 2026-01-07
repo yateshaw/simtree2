@@ -4927,6 +4927,108 @@ export function registerRoutes(app: Express): Server {
           }
         );
 
+        // Handle Stripe fees - deduct from profit wallet and add to stripe_fees wallet
+        try {
+          const creditAmount = parseFloat(transaction.amount);
+          
+          // Validation: Ensure valid credit amount
+          if (isNaN(creditAmount) || creditAmount <= 0) {
+            console.error(`[Verify Payment] Invalid credit amount: ${transaction.amount}`);
+            throw new Error('Invalid credit amount for fee calculation');
+          }
+          
+          // Determine if card is international by retrieving the payment method from Stripe
+          let actualIsInternational = false;
+          
+          try {
+            if (paymentInfo.paymentIntentId && STRIPE_SECRET_KEY) {
+              const stripe = new Stripe(STRIPE_SECRET_KEY, {
+                apiVersion: '2023-10-16' as any,
+              });
+              
+              const paymentIntent = await stripe.paymentIntents.retrieve(paymentInfo.paymentIntentId);
+              
+              if (paymentIntent.payment_method) {
+                const paymentMethod = await stripe.paymentMethods.retrieve(paymentIntent.payment_method as string);
+                const cardCountry = paymentMethod.card?.country;
+                
+                if (cardCountry) {
+                  actualIsInternational = cardCountry !== 'US';
+                  console.log(`[Verify Payment] Server-side card detection: Country=${cardCountry}, International=${actualIsInternational}`);
+                }
+              }
+            }
+          } catch (cardError) {
+            console.error('[Verify Payment] Error detecting card country:', cardError);
+            // Default to domestic rate if we can't determine
+          }
+          
+          // Calculate fees based on actual card type
+          const baseStripeFee = creditAmount * 0.029 + 0.30; // Standard Stripe fee (2.9% + $0.30)
+          const internationalFee = actualIsInternational ? creditAmount * 0.01 : 0; // Additional 1% for international cards
+          const stripeFee = baseStripeFee + internationalFee;
+          
+          console.log(`[Verify Payment] Processing Stripe fees for checkout session ${sessionId}`);
+          console.log(`[Verify Payment] Credit amount: $${creditAmount.toFixed(2)}, Base fee: $${baseStripeFee.toFixed(2)}, International: ${actualIsInternational}, Total fee: $${stripeFee.toFixed(2)}`);
+          
+          // Get SimTree company ID
+          const simtreeCompanyId = await storage.getPlatformCompanyId();
+          if (simtreeCompanyId) {
+            // Get profit wallet for SimTree
+            const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
+            
+            if (profitWallet) {
+              const internationalLabel = actualIsInternational ? ' (International Card)' : '';
+              
+              // Deduct fees from profit wallet
+              const feeTransactionProfit = await storage.createTransaction({
+                type: 'debit',
+                status: 'completed',
+                amount: stripeFee.toFixed(2),
+                paymentMethod: 'stripe',
+                description: `Stripe fees for checkout session ${sessionId}${internationalLabel}`,
+                walletId: profitWallet.id,
+                stripePaymentId: null,
+                stripeSessionId: sessionId,
+                stripePaymentIntentId: paymentInfo.paymentIntentId,
+                relatedTransactionId: transaction.id
+              });
+              await storage.addWalletBalance(profitWallet.id, -stripeFee);
+              
+              console.log(`[Verify Payment] Deducted $${stripeFee.toFixed(2)} from profit wallet ${profitWallet.id}${internationalLabel}`);
+              
+              // Add fees to stripe_fees wallet for tracking
+              const stripeFeesWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'stripe_fees');
+              if (stripeFeesWallet) {
+                await storage.createTransaction({
+                  type: 'credit',
+                  status: 'completed',
+                  amount: stripeFee.toFixed(2),
+                  paymentMethod: 'stripe',
+                  description: `Stripe fees received for checkout session ${sessionId}${internationalLabel}`,
+                  walletId: stripeFeesWallet.id,
+                  stripePaymentId: null,
+                  stripeSessionId: sessionId,
+                  stripePaymentIntentId: paymentInfo.paymentIntentId,
+                  relatedTransactionId: feeTransactionProfit.id
+                });
+                await storage.addWalletBalance(stripeFeesWallet.id, stripeFee);
+                
+                console.log(`[Verify Payment] Added $${stripeFee.toFixed(2)} to stripe_fees wallet ${stripeFeesWallet.id}`);
+              } else {
+                console.error('[Verify Payment] stripe_fees wallet not found');
+              }
+            } else {
+              console.error('[Verify Payment] Profit wallet not found for SimTree');
+            }
+          } else {
+            console.error('[Verify Payment] SimTree company not found for fee processing');
+          }
+        } catch (feeError) {
+          console.error('[Verify Payment] Error handling Stripe fees:', feeError);
+          // Continue execution even if fee handling fails - the main transaction is already processed
+        }
+
         return res.json({
           success: true,
           transaction: updatedTransaction
