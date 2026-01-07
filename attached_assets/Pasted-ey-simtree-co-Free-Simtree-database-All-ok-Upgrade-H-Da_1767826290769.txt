@@ -1,0 +1,136 @@
+ey@simtree.co
+Free
+
+Simtree database
+
+All ok
+
+
+Upgrade
+
+H
+Dashboard
+Branches
+Integrations
+Settings
+
+production
+
+production
+Overview
+Monitoring
+SQL Editor
+Tables
+Backup & Restore
+Data Masking
+Beta
+Data API
+Auth
+Feedback
+Collapse menu
+SQL Editor
+production
+
+Saved
+History
+detailed wallet transaction info with related company data
+Jan 7, 2026 - 7:51pm
+profit transactions from profit wallets with company info
+Jan 7, 2026 - 7:49pm
+wallet_transactions table structure
+Jan 7, 2026 - 7:48pm
+transfer 4.20 from wallet 5 to wallet 7
+Jan 7, 2026 - 7:45pm
+insert stripe fee credit transaction for wallet
+Jan 7, 2026 - 7:44pm
+insert stripe fee transaction for international card payment
+Jan 7, 2026 - 7:40pm
+delete wallet transaction with id 88
+Jan 7, 2026 - 7:40pm
+transfer 4.20 from wallet 5 to wallet 7
+Jan 7, 2026 - 7:36pm
+insert stripe fee credit transaction for wallet
+Jan 7, 2026 - 7:35pm
+insert stripe fee transaction for international card payment
+Jan 7, 2026 - 7:31pm
+profit and stripe fees wallets by company
+Jan 7, 2026 - 7:29pm
+company 1 profit and stripe fees wallet balances
+Jan 7, 2026 - 7:24pm
+stripe wallet credits without fee entries
+Jan 7, 2026 - 7:22pm
+get data type and nullability of 'city' in 'companies' table
+Jan 7, 2026 - 3:34pm
+companies table structure and column details
+Jan 7, 2026 - 3:32pm
+create credit notes table and related structures
+Jan 6, 2026 - 4:29pm
+company 3 wallet details
+Jan 1, 2026 - 9:57pm
+companies with "simtree" in their name
+Jan 1, 2026 - 9:56pm
+company 3 wallets with balances
+Jan 1, 2026 - 12:36pm
+wallet transaction counts ranked by frequency
+Jan 1, 2026 - 12:34pm
+transaction status distribution
+Jan 1, 2026 - 12:30pm
+add credit note id column to purchased esims table
+Jan 1, 2026 - 12:04pm
+add cancellation and credit note columns to purchased_esims
+Dec 26, 2025 - 1:37pm
+add cancelled_at timestamp to purchased_esims table
+Dec 26, 2025 - 1:22pm
+create session table with expiration index
+Dec 23, 2025 - 3:03am
+add auto-renew flag to purchased eSIMs table
+Dec 22, 2025 - 11:15pm
+find renewal-related columns in purchased_esims table
+Dec 22, 2025 - 11:14pm
+executives table structure details
+Dec 22, 2025 - 11:10pm
+add auto-renew flag to executives table
+Dec 22, 2025 - 11:08pm
+Untitled
+
+Save
+Primary
+Active
+neondb
+
+
+Selection deleted
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+⌄
+SELECT wt.id, wt.description, wt.related_transaction_id, wt.wallet_id,
+       w.company_id as wallet_company_id,
+       rt.wallet_id as related_wallet_id,
+       rw.company_id as related_company_id,
+       rc.name as related_company_name
+FROM wallet_transactions wt
+JOIN wallets w ON wt.wallet_id = w.id
+LEFT JOIN wallet_transactions rt ON wt.related_transaction_id = rt.id
+LEFT JOIN wallets rw ON rt.wallet_id = rw.id
+LEFT JOIN companies rc ON rw.company_id = rc.id
+WHERE wt.id = 90;
+Connected (1 query)
+
+Run
+
+Explain
+
+Analyze
+206ms
+1 row
+#	id	description	related_transaction_id	wallet_id	wallet_company_id	related_wallet_id	related_company_id	related_company_name
+1	90	recell: Stripe fees for payment pi_3SjmBgQ9Cg2XTrKT1ExZoxsw (International Card)	13	5	3	9	8	recell

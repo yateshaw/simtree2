@@ -4077,9 +4077,10 @@ export function registerRoutes(app: Express): Server {
       
       const enrichedTransactions = await Promise.all(transactions.map(async transaction => {
         // Special handling for SimTree transactions first (use dynamic ID lookup)
-        // BUT skip this for VAT transactions - they need to show the client company
+        // BUT skip this for VAT transactions and Stripe fee transactions - they need to show the client company
         const isVatTransaction = transaction.description?.includes('VAT (5%):');
-        if (simtreeCompanyId && transaction.companyId === simtreeCompanyId && !isVatTransaction) {
+        const isStripeFeeTransaction = transaction.description?.includes('Stripe fees');
+        if (simtreeCompanyId && transaction.companyId === simtreeCompanyId && !isVatTransaction && !isStripeFeeTransaction) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
@@ -4103,8 +4104,8 @@ export function registerRoutes(app: Express): Server {
         let companyName = "Unknown";
         
         // Special case for SimTree wallets (use dynamic ID lookup)
-        // Skip this for VAT transactions - they need to show the client company
-        if (wallet && simtreeCompanyId && wallet.companyId === simtreeCompanyId && !isVatTransaction) {
+        // Skip this for VAT transactions and Stripe fee transactions - they need to show the client company
+        if (wallet && simtreeCompanyId && wallet.companyId === simtreeCompanyId && !isVatTransaction && !isStripeFeeTransaction) {
           return {
             ...transaction,
             companyName: simtreeCompany?.name || 'Simtree',
@@ -4974,6 +4975,16 @@ export function registerRoutes(app: Express): Server {
           // Get SimTree company ID
           const simtreeCompanyId = await storage.getPlatformCompanyId();
           if (simtreeCompanyId) {
+            // Get the company name of the user who made the payment
+            const transactionWallet = await storage.getWalletById(transaction.walletId);
+            let payingCompanyName = 'Unknown';
+            if (transactionWallet) {
+              const payingCompany = await storage.getCompany(transactionWallet.companyId);
+              if (payingCompany) {
+                payingCompanyName = payingCompany.name;
+              }
+            }
+            
             // Get profit wallet for SimTree
             const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
             
@@ -4986,7 +4997,7 @@ export function registerRoutes(app: Express): Server {
                 status: 'completed',
                 amount: stripeFee.toFixed(2),
                 paymentMethod: 'stripe',
-                description: `Stripe fees for checkout session ${sessionId}${internationalLabel}`,
+                description: `${payingCompanyName}: Stripe fees for payment ${paymentInfo.paymentIntentId}${internationalLabel}`,
                 walletId: profitWallet.id,
                 stripePaymentId: null,
                 stripeSessionId: sessionId,
@@ -5005,7 +5016,7 @@ export function registerRoutes(app: Express): Server {
                   status: 'completed',
                   amount: stripeFee.toFixed(2),
                   paymentMethod: 'stripe',
-                  description: `Stripe fees received for checkout session ${sessionId}${internationalLabel}`,
+                  description: `${payingCompanyName}: Stripe fees received for payment ${paymentInfo.paymentIntentId}${internationalLabel}`,
                   walletId: stripeFeesWallet.id,
                   stripePaymentId: null,
                   stripeSessionId: sessionId,
@@ -5445,6 +5456,10 @@ export function registerRoutes(app: Express): Server {
             throw new Error("SimTree company not found");
           }
           
+          // Get the company name of the user who made the payment
+          const payingCompany = await storage.getCompany(req.user.companyId);
+          const payingCompanyName = payingCompany?.name || 'Unknown';
+          
           // Get profit wallet for SimTree
           const profitWallet = await storage.getWalletByTypeAndCompany(simtreeCompanyId, 'profit');
 
@@ -5455,7 +5470,7 @@ export function registerRoutes(app: Express): Server {
               status: 'completed',
               amount: stripeFee.toFixed(2),
               paymentMethod: 'stripe',
-              description: `Stripe fees for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
+              description: `${payingCompanyName}: Stripe fees for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
               walletId: profitWallet.id,
               stripePaymentId: null,
               stripeSessionId: null,
@@ -5472,7 +5487,7 @@ export function registerRoutes(app: Express): Server {
                 status: 'completed',
                 amount: stripeFee.toFixed(2),
                 paymentMethod: 'stripe',
-                description: `Stripe fees received for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
+                description: `${payingCompanyName}: Stripe fees received for payment ${paymentIntentId}${actualIsInternational ? ' (International Card)' : ''}`,
                 walletId: stripeFeesWallet.id,
                 stripePaymentId: null,
                 stripeSessionId: null,
