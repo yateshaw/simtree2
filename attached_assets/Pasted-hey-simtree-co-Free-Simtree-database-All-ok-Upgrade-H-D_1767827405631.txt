@@ -1,0 +1,132 @@
+hey@simtree.co
+Free
+
+Simtree database
+
+All ok
+
+
+Upgrade
+
+H
+Dashboard
+Branches
+Integrations
+Settings
+
+production
+
+production
+Overview
+Monitoring
+SQL Editor
+Tables
+Backup & Restore
+Data Masking
+Beta
+Data API
+Auth
+Feedback
+Collapse menu
+SQL Editor
+production
+
+Saved
+History
+recent wallet transactions
+Jan 7, 2026 - 8:09pm
+companies table structure and column details
+Jan 7, 2026 - 8:08pm
+add city column to companies table
+Jan 7, 2026 - 8:02pm
+update wallet transaction description for specific ID
+Jan 7, 2026 - 7:55pm
+detailed wallet transaction info with related company data
+Jan 7, 2026 - 7:51pm
+profit transactions from profit wallets with company info
+Jan 7, 2026 - 7:49pm
+wallet_transactions table structure
+Jan 7, 2026 - 7:48pm
+transfer 4.20 from wallet 5 to wallet 7
+Jan 7, 2026 - 7:45pm
+insert stripe fee credit transaction for wallet
+Jan 7, 2026 - 7:44pm
+insert stripe fee transaction for international card payment
+Jan 7, 2026 - 7:40pm
+delete wallet transaction with id 88
+Jan 7, 2026 - 7:40pm
+transfer 4.20 from wallet 5 to wallet 7
+Jan 7, 2026 - 7:36pm
+insert stripe fee credit transaction for wallet
+Jan 7, 2026 - 7:35pm
+insert stripe fee transaction for international card payment
+Jan 7, 2026 - 7:31pm
+profit and stripe fees wallets by company
+Jan 7, 2026 - 7:29pm
+company 1 profit and stripe fees wallet balances
+Jan 7, 2026 - 7:24pm
+stripe wallet credits without fee entries
+Jan 7, 2026 - 7:22pm
+get data type and nullability of 'city' in 'companies' table
+Jan 7, 2026 - 3:34pm
+companies table structure and column details
+Jan 7, 2026 - 3:32pm
+create credit notes table and related structures
+Jan 6, 2026 - 4:29pm
+company 3 wallet details
+Jan 1, 2026 - 9:57pm
+companies with "simtree" in their name
+Jan 1, 2026 - 9:56pm
+company 3 wallets with balances
+Jan 1, 2026 - 12:36pm
+wallet transaction counts ranked by frequency
+Jan 1, 2026 - 12:34pm
+transaction status distribution
+Jan 1, 2026 - 12:30pm
+add credit note id column to purchased esims table
+Jan 1, 2026 - 12:04pm
+add cancellation and credit note columns to purchased_esims
+Dec 26, 2025 - 1:37pm
+add cancelled_at timestamp to purchased_esims table
+Dec 26, 2025 - 1:22pm
+create session table with expiration index
+Dec 23, 2025 - 3:03am
+add auto-renew flag to purchased eSIMs table
+Dec 22, 2025 - 11:15pm
+find renewal-related columns in purchased_esims table
+Dec 22, 2025 - 11:14pm
+executives table structure details
+Dec 22, 2025 - 11:10pm
+add auto-renew flag to executives table
+Dec 22, 2025 - 11:08pm
+Untitled
+
+Save
+Primary
+Active
+neondb
+
+
+Selection deleted
+1
+2
+3
+⌄
+SELECT * FROM wallet_transactions 
+ORDER BY id DESC 
+LIMIT 5;
+Connected (1 query)
+
+Run
+
+Explain
+
+Analyze
+221ms
+5 rows
+#	id	wallet_id	amount	currency	type	description	stripe_payment_id	stripe_session_id	stripe_payment_intent_id	status	payment_method	created_at	related_transaction_id	esim_plan_id	esim_order_id	invoiced_at	bill_id
+1	91	7	4.20	USD	credit	recell: Stripe fees received for payment pi_3SjmBgQ9Cg2XTrKT1ExZoxsw (International Card)			pi_3SjmBgQ9Cg2XTrKT1ExZoxsw	completed	stripe	2025-12-29 19:33:08.649	90				
+2	90	5	4.20	USD	debit	recell: Stripe fees for payment pi_3SjmBgQ9Cg2XTrKT1ExZoxsw (International Card)			pi_3SjmBgQ9Cg2XTrKT1ExZoxsw	completed	stripe	2025-12-29 19:33:08.649	13				
+3	89	7	4.20	USD	credit	Stripe fees received for payment pi_3SjmBgQ9Cg2XTrKT1ExZoxsw (International Card)			pi_3SjmBgQ9Cg2XTrKT1ExZoxsw	completed	stripe	2025-12-29 19:33:08.649	88				
+4	87	4	0.60	USD	credit	yatecorp: Refund for cancelled eSIM: Australia 100MB 7Days (Mario Hoek)				completed		2026-01-05 12:39:48.449	84				
+5	86	4	0.30	USD	debit	Debit for refund of Australia 100MB 7Days to Mario Hoek (yatecorp) (from profit wallet)
