@@ -279,6 +279,27 @@ export default function WalletTransactionsPage({ params }: WalletTransactionsPag
                                 }
                               }
                               
+                              // For Stripe fee transactions that start with "companyName: Stripe fees..."
+                              if (tx.description?.includes("Stripe fees")) {
+                                const colonIndex = tx.description.indexOf(':');
+                                if (colonIndex > 0) {
+                                  const companyPrefix = tx.description.substring(0, colonIndex).trim();
+                                  // Validate against companies list
+                                  const matchingCompany = companies.find(c => 
+                                    c.name.toLowerCase() === companyPrefix.toLowerCase() ||
+                                    c.name.toLowerCase().includes(companyPrefix.toLowerCase()) ||
+                                    companyPrefix.toLowerCase().includes(c.name.toLowerCase())
+                                  );
+                                  if (matchingCompany) {
+                                    return matchingCompany.name;
+                                  }
+                                  // If it looks like a company name prefix, use it
+                                  if (companyPrefix.length > 1 && companyPrefix.length < 50) {
+                                    return companyPrefix;
+                                  }
+                                }
+                              }
+                              
                               // For coupon credits and other transactions that start with company name
                               if (tx.description?.includes("Simtree credit") ||
                                   tx.description?.includes("coupon:")) {
