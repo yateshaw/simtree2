@@ -288,10 +288,9 @@ async function archiveInvoices() {
       const billingDate = new Date(bill.billingDate);
       const dueDate = new Date(billingDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      // Build full address with country
-      const fullAddress = company?.address 
-        ? (company?.country ? `${company.address}, ${company.country}` : company.address)
-        : '[Client Business Address]';
+      // Build full address with city and country
+      const addressParts = [company?.address, company?.city, company?.country].filter(Boolean);
+      const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : '[Client Business Address]';
       
       const invoiceTemplateData = {
         billNumber: bill.billNumber,
@@ -375,10 +374,14 @@ async function archiveCreditNotes() {
         totalAmount: parseFloat(item.totalAmount).toFixed(2)
       }));
 
+      // Build full address with city and country
+      const cnAddressParts = [company?.address, company?.city, company?.country].filter(Boolean);
+      const cnFullAddress = cnAddressParts.length > 0 ? cnAddressParts.join(', ') : '[Client Business Address]';
+
       const templateData = {
         creditNoteNumber: creditNote.creditNoteNumber,
         companyName: company?.name || 'Unknown',
-        companyAddress: company?.address || '[Client Business Address]',
+        companyAddress: cnFullAddress,
         issueDate: new Date(creditNote.createdAt!).toLocaleDateString(),
         totalAmount: parseFloat(creditNote.totalAmount).toFixed(2),
         currency: 'USD',

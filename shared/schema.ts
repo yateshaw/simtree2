@@ -65,6 +65,7 @@ export const companies = pgTable("companies", {
   name: text("name").notNull().unique(),
   taxNumber: text("tax_number").unique(),
   address: text("address"),
+  city: text("city"),
   country: text("country"),
   currency: text("currency").default("USD"), // Direct currency selection, independent of country
   entityType: text("entity_type"),

@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Building2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Building2, Loader2, Info } from 'lucide-react';
 import api from '@/lib/api';
 import { companyInfoSchema as baseCompanyInfoSchema, type Company } from '@/../../shared/schema';
 import { config } from '@/lib/config';
@@ -27,6 +27,7 @@ import ReactCountryFlag from 'react-country-flag';
 const companyInfoSchema = baseCompanyInfoSchema.extend({
   companyName: z.string().min(2, 'Company name must be at least 2 characters').max(100),
   industry: z.string().optional(),
+  city: z.string().min(1, 'City is required'),
   phoneCountryCode: z.string().min(1, 'Country code is required'),
   phoneNumber: z.string().min(5, 'Phone number is too short'),
   acceptTerms: z.boolean().refine(val => val === true, {
@@ -347,6 +348,7 @@ export default function CompleteProfileEnhanced() {
       companyName: defaultCompanyName,
       country: '',
       address: '',
+      city: '',
       taxNumber: '',
       entityType: '',
       contactName: '',
@@ -687,6 +689,45 @@ export default function CompleteProfileEnhanced() {
                   </FormItem>
                 </div>
 
+                {/* Address, City, Country */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-gray-900">Address *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Street address" 
+                            {...field} 
+                            className="h-10 border-gray-200 focus:border-teal-500 focus:ring-teal-500" 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-gray-900">City *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="City" 
+                            {...field} 
+                            className="h-10 border-gray-200 focus:border-teal-500 focus:ring-teal-500" 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 {/* Country */}
                 <FormField
                   control={form.control}
@@ -738,25 +779,6 @@ export default function CompleteProfileEnhanced() {
                   )}
                 />
 
-                {/* Address */}
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-900">Address</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Full business address including postal/zip code" 
-                          {...field} 
-                          className="min-h-[80px] border-gray-200 focus:border-teal-500 focus:ring-teal-500" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 {/* Contact Email and Company Website */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
@@ -796,6 +818,14 @@ export default function CompleteProfileEnhanced() {
                     )}
                   />
                 </div>
+
+                {/* VAT Notice */}
+                <Alert className="border-amber-200 bg-amber-50/50">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    If you are VAT registered, please provide your VAT number. Without it, VAT charged on future invoices will not be recoverable.
+                  </AlertDescription>
+                </Alert>
 
                 {/* Tax/VAT Number and Entity Type */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

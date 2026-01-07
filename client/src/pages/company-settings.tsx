@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Building2, Globe, DollarSign, Save, Info } from "lucide-react";
+import { Loader2, Building2, Globe, DollarSign, Save, Info, AlertTriangle } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { useEffect } from "react";
@@ -30,6 +30,7 @@ const companySettingsSchema = z.object({
   phoneCountryCode: z.string().optional(),
   phoneNumber: z.string().optional(),
   address: z.string().min(1, "Address is required"),
+  city: z.string().optional(),
   website: z.string().optional(),
   contactEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   description: z.string().optional(),
@@ -115,6 +116,7 @@ export default function CompanySettings() {
       phoneCountryCode: '',
       phoneNumber: '',
       address: '',
+      city: '',
       website: '',
       contactEmail: '',
       description: '',
@@ -135,6 +137,7 @@ export default function CompanySettings() {
         phoneCountryCode: company.phoneCountryCode || '',
         phoneNumber: company.phoneNumber || '',
         address: company.address || '',
+        city: company.city || '',
         website: company.website || '',
         contactEmail: company.contactEmail || '',
         description: company.description || '',
@@ -388,9 +391,9 @@ export default function CompanySettings() {
                     name="taxNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Tax Number / Registration Number</FormLabel>
+                        <FormLabel>Tax Number / VAT Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="Company tax/registration number" {...field} data-testid="input-tax-number" />
+                          <Input placeholder="Company tax/VAT number" {...field} data-testid="input-tax-number" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -398,24 +401,51 @@ export default function CompanySettings() {
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company Address</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Your company address" 
-                          className="min-h-[80px]"
-                          {...field} 
-                          data-testid="input-company-address"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* VAT Notice */}
+                <Alert className="border-amber-200 bg-amber-50/50">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    If you are VAT registered, please provide your VAT number. Without it, VAT charged on future invoices will not be recoverable.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Address</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Street address" 
+                            {...field} 
+                            data-testid="input-company-address"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="City" 
+                            {...field} 
+                            data-testid="input-company-city"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
