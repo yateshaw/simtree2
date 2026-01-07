@@ -309,10 +309,9 @@ async function archiveInvoices() {
       html = await embedLogoInHtml(html);
       const pdfBuffer = await convertHtmlToPdf(html);
 
-      // Use bill's createdAt date for the filename, not from the bill number
+      // Use bill's billingDate for the filename to match the date shown in the PDF
       const sanitizedCompanyName = (company?.name || 'Unknown').replace(/[^a-zA-Z0-9-_ ]/g, '');
-      const createdDate = new Date(bill.createdAt!);
-      const dateStr = `${createdDate.getFullYear()}${String(createdDate.getMonth() + 1).padStart(2, '0')}${String(createdDate.getDate()).padStart(2, '0')}`;
+      const dateStr = `${billingDate.getFullYear()}${String(billingDate.getMonth() + 1).padStart(2, '0')}${String(billingDate.getDate()).padStart(2, '0')}`;
       
       // Extract sequence from bill number (BILL-0001 -> 0001)
       const sequenceMatch = bill.billNumber.match(/BILL-(\d+)$/);
