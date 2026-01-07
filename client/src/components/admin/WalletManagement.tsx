@@ -469,10 +469,31 @@ export default function WalletManagement({ defaultTab = 'simtree' }: WalletManag
             <CardContent className="pt-5">
               {simtreeWallets.length > 0 ? (
                 <DataTable
-                  data={simtreeTransactions.map(tx => ({
-                    ...tx,
-                    companyName: "SimTree"
-                  }))}
+                  data={simtreeTransactions.map(tx => {
+                    // For Stripe fee transactions, extract company from description prefix
+                    let companyName = "SimTree";
+                    if (tx.description?.includes("Stripe fees")) {
+                      const colonIndex = tx.description.indexOf(':');
+                      if (colonIndex > 0) {
+                        const prefix = tx.description.substring(0, colonIndex).trim();
+                        // Validate against companies list
+                        const matchingCompany = typedCompanies.find(c => 
+                          c.name.toLowerCase() === prefix.toLowerCase() ||
+                          c.name.toLowerCase().includes(prefix.toLowerCase()) ||
+                          prefix.toLowerCase().includes(c.name.toLowerCase())
+                        );
+                        if (matchingCompany) {
+                          companyName = matchingCompany.name;
+                        } else if (prefix.length > 1 && prefix.length < 50) {
+                          companyName = prefix;
+                        }
+                      }
+                    }
+                    return {
+                      ...tx,
+                      companyName
+                    };
+                  })}
                   columns={[
                     {
                       key: "date",
