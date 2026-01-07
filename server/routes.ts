@@ -4953,7 +4953,7 @@ export function registerRoutes(app: Express): Server {
                 const cardCountry = paymentMethod.card?.country;
                 
                 if (cardCountry) {
-                  actualIsInternational = cardCountry !== 'US';
+                  actualIsInternational = cardCountry !== 'AE'; // UAE is the Stripe account country
                   console.log(`[Verify Payment] Server-side card detection: Country=${cardCountry}, International=${actualIsInternational}`);
                 }
               }
@@ -5382,7 +5382,7 @@ export function registerRoutes(app: Express): Server {
             const cardCountry = paymentMethod.card?.country;
             
             if (cardCountry) {
-              actualIsInternational = cardCountry !== 'US';
+              actualIsInternational = cardCountry !== 'AE'; // UAE is the Stripe account country
               console.log(`Server-side card detection: Country=${cardCountry}, International=${actualIsInternational}`);
             } else {
               console.log('No country information available from Stripe PaymentMethod');
