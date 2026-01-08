@@ -4,12 +4,145 @@ import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { emitEvent, EventTypes } from "../sse";
 import { EsimAccessService } from "../services/esim-access";
+import { storage } from "../storage";
 
 const router = Router();
 
 /**
- * This route provides a manual way to force synchronization of an eSIM status
- * It's useful when webhook callbacks aren't working properly
+ * Check live provider status for an eSIM and update if needed
+ * This queries the actual provider API to get the current status
+ */
+router.get("/esim/check/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    if (!orderId) {
+      return res.status(400).json({ error: "Missing orderId parameter" });
+    }
+    
+    console.log(`[Sync] Checking live provider status for order: ${orderId}`);
+    
+    // Find the corresponding eSIM - select only required columns to avoid schema mismatch
+    const [esim] = await db
+      .select({
+        id: schema.purchasedEsims.id,
+        orderId: schema.purchasedEsims.orderId,
+        status: schema.purchasedEsims.status,
+        employeeId: schema.purchasedEsims.employeeId,
+        metadata: schema.purchasedEsims.metadata,
+        activationDate: schema.purchasedEsims.activationDate,
+      })
+      .from(schema.purchasedEsims)
+      .where(eq(schema.purchasedEsims.orderId, orderId));
+    
+    if (!esim) {
+      return res.status(404).json({ error: `No eSIM found with orderId: ${orderId}` });
+    }
+    
+    // Query live status from provider
+    const esimAccessService = new EsimAccessService(storage);
+    const statusResult = await esimAccessService.checkEsimStatus(orderId);
+    
+    const providerStatus = statusResult.rawData?.obj?.esimList?.[0]?.esimStatus?.toUpperCase();
+    const smdpStatus = statusResult.rawData?.obj?.esimList?.[0]?.smdpStatus?.toUpperCase();
+    const activateTime = statusResult.rawData?.obj?.esimList?.[0]?.activateTime;
+    const installationTime = statusResult.rawData?.obj?.esimList?.[0]?.installationTime;
+    
+    console.log(`[Sync] Live provider status: esimStatus=${providerStatus}, smdpStatus=${smdpStatus}, activateTime=${activateTime}`);
+    
+    // Define activation statuses
+    const ACTIVATED_STATUSES = ['ONBOARD', 'ENABLED', 'ACTIVATED', 'IN_USE'];
+    const hasActivateTime = activateTime && activateTime !== 'null' && activateTime !== null;
+    const hasInstallTime = installationTime && installationTime !== 'null' && installationTime !== null;
+    
+    // Determine if eSIM should be activated
+    const shouldBeActivated = ACTIVATED_STATUSES.includes(providerStatus || '') || 
+                              hasActivateTime || hasInstallTime;
+    
+    let newStatus = esim.status;
+    let statusChanged = false;
+    
+    if (shouldBeActivated && esim.status === 'waiting_for_activation') {
+      newStatus = 'activated';
+      statusChanged = true;
+      
+      // Determine activation date
+      const providerTime = activateTime || installationTime;
+      const isValidTimestamp = providerTime && providerTime !== 'null' && providerTime !== null;
+      const activationDate = isValidTimestamp ? new Date(providerTime) : new Date();
+      
+      await db
+        .update(schema.purchasedEsims)
+        .set({
+          status: "activated",
+          activationDate: activationDate,
+          metadata: {
+            ...(esim.metadata || {}),
+            syncedAt: new Date().toISOString(),
+            status: "activated",
+            providerStatus: providerStatus,
+            smdpStatus: smdpStatus,
+            previousStatus: esim.status,
+            viaManualSync: true,
+            rawData: statusResult.rawData,
+          },
+        })
+        .where(eq(schema.purchasedEsims.id, esim.id));
+      
+      emitEvent(EventTypes.ESIM_STATUS_CHANGE, {
+        esimId: esim.id,
+        employeeId: esim.employeeId,
+        oldStatus: esim.status,
+        newStatus: "activated",
+        orderId: esim.orderId,
+        providerStatus: providerStatus,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`[Sync] Updated eSIM ${esim.id} from '${esim.status}' to 'activated' based on live provider status`);
+    } else {
+      // Just update metadata with latest provider data
+      await db
+        .update(schema.purchasedEsims)
+        .set({
+          metadata: {
+            ...(esim.metadata || {}),
+            syncedAt: new Date().toISOString(),
+            providerStatus: providerStatus,
+            smdpStatus: smdpStatus,
+            rawData: statusResult.rawData,
+          },
+        })
+        .where(eq(schema.purchasedEsims.id, esim.id));
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: statusChanged 
+        ? `eSIM ${orderId} status changed from '${esim.status}' to '${newStatus}'`
+        : `eSIM ${orderId} status remains '${esim.status}' (provider: ${providerStatus})`,
+      esim: {
+        id: esim.id,
+        orderId: esim.orderId,
+        previousStatus: esim.status,
+        currentStatus: newStatus,
+        statusChanged,
+        providerStatus,
+        smdpStatus,
+        activateTime,
+        installationTime,
+        shouldBeActivated
+      }
+    });
+    
+  } catch (error) {
+    console.error("[Sync] Error checking live eSIM status:", error);
+    return res.status(500).json({ error: "Internal error checking eSIM status" });
+  }
+});
+
+/**
+ * Force update status to activated (legacy route)
  */
 router.get("/esim/:orderId", async (req, res) => {
   try {
