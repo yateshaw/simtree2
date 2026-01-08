@@ -102,3 +102,8 @@ args = "npm run dev"
 
 [agent]
 integrations = ["javascript_stripe:1.0.0", "javascript_sendgrid:1.0.0"]
+
+[userenv]
+
+[userenv.production]
+NODE_ENV = "production"
