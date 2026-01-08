@@ -212,11 +212,8 @@ async function startServer() {
     // This allows eSIM Access to validate and send webhooks without authentication
     app.get('/api/esim/webhook', (req, res) => {
       log('[eSIM Webhook] GET request - URL verification');
-      res.status(200).json({ 
-        status: 'ok', 
-        message: 'eSIM Access webhook endpoint is active',
-        timestamp: new Date().toISOString()
-      });
+      // Try plain text response for validation - some services prefer this
+      res.status(200).send('OK');
     });
     
     app.post('/api/esim/webhook', async (req, res) => {
