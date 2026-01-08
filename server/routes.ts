@@ -1589,6 +1589,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: "User is not associated with a company" });
       }
       
+      // Check for duplicate email within the same company (normalize: trim + lowercase)
+      const normalizedEmail = parsedData.email?.trim().toLowerCase();
+      if (normalizedEmail) {
+        const existingEmployees = await storage.getEmployees(req.user.companyId);
+        const emailExists = existingEmployees.some(
+          emp => emp.email?.trim().toLowerCase() === normalizedEmail
+        );
+        if (emailExists) {
+          return res.status(400).json({ error: `An employee with email "${parsedData.email}" already exists in your company` });
+        }
+      }
+      
       const employee = await storage.createEmployee({
         ...parsedData,
         companyId: req.user.companyId,
@@ -1674,6 +1686,38 @@ export function registerRoutes(app: Express): Server {
       // Use companyId instead of user.id
       if (!req.user.companyId) {
         return res.status(400).json({ error: "User is not associated with a company" });
+      }
+      
+      // Check for duplicate emails within the same company (normalize: trim + lowercase)
+      const existingEmployees = await storage.getEmployees(req.user.companyId);
+      const existingEmails = new Set(existingEmployees.map(emp => emp.email?.trim().toLowerCase()).filter(Boolean));
+      
+      // Check for duplicates in the request itself and against existing employees
+      const requestEmails: string[] = [];
+      const duplicatesInRequest: string[] = [];
+      const duplicatesInCompany: string[] = [];
+      
+      for (const exec of req.body) {
+        const email = exec.email?.trim().toLowerCase();
+        if (email) {
+          if (requestEmails.includes(email)) {
+            duplicatesInRequest.push(exec.email);
+          } else if (existingEmails.has(email)) {
+            duplicatesInCompany.push(exec.email);
+          }
+          requestEmails.push(email);
+        }
+      }
+      
+      if (duplicatesInRequest.length > 0 || duplicatesInCompany.length > 0) {
+        const errors: string[] = [];
+        if (duplicatesInRequest.length > 0) {
+          errors.push(`Duplicate emails in your upload: ${duplicatesInRequest.join(', ')}`);
+        }
+        if (duplicatesInCompany.length > 0) {
+          errors.push(`Emails already exist in your company: ${duplicatesInCompany.join(', ')}`);
+        }
+        return res.status(400).json({ error: errors.join('. ') });
       }
       
       const employees = await Promise.all(

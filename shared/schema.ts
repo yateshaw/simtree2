@@ -122,6 +122,10 @@ export const employees = pgTable("executives", {
   planEndDate: timestamp("plan_end_date", { mode: 'string' }),
   planValidity: integer("plan_validity"),
   autoRenewEnabled: boolean("auto_renew_enabled").notNull().default(false),
+}, (table) => {
+  return {
+    emailCompanyIdx: uniqueIndex("employees_email_company_idx").on(table.email, table.companyId)
+  };
 });
 
 export const dataPackages = pgTable("data_packages", {
