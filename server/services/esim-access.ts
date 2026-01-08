@@ -54,6 +54,17 @@ export class EsimAccessService {
   private usageCheckIntervalId: NodeJS.Timeout | null = null;
 
   /**
+   * Convert orderNo (e.g., "B24112011030010") to esimTranNo (e.g., "24112011030010")
+   * The esimTranNo is the orderNo without the leading "B" prefix
+   */
+  private orderNoToEsimTranNo(orderNo: string): string {
+    if (orderNo && orderNo.startsWith('B')) {
+      return orderNo.substring(1);
+    }
+    return orderNo;
+  }
+
+  /**
    * Checks the API connectivity and availability
    * Used by the monitoring service
    */
@@ -1043,10 +1054,12 @@ export class EsimAccessService {
       }
 
       const orderId = orderIds[0]; // For single usage query
-      // Querying data usage
+      // Convert orderNo to esimTranNo (strip leading "B" prefix)
+      const esimTranNo = this.orderNoToEsimTranNo(orderId);
+      console.log(`[Usage] Querying usage for orderId ${orderId} -> esimTranNo ${esimTranNo}`);
       
       const payload = {
-        esimTranNoList: [orderId]
+        esimTranNoList: [esimTranNo]
       };
 
       const { data } = await this.withRetry(() =>
@@ -1069,10 +1082,10 @@ export class EsimAccessService {
         };
       }
 
-      // Extract usage data from the first (and only) result
-      const usageInfo = data.obj?.esimUsageList?.[0];
+      // Extract usage data - match by esimTranNo
+      const usageInfo = data.obj?.esimUsageList?.find(u => u.esimTranNo === esimTranNo) || data.obj?.esimUsageList?.[0];
       if (!usageInfo) {
-        console.error(`[Usage] No usage data found for eSIM ${orderId}`);
+        console.error(`[Usage] No usage data found for eSIM ${orderId} (esimTranNo: ${esimTranNo})`);
         return {
           success: false,
           dataUsed: "0",
@@ -1125,10 +1138,18 @@ export class EsimAccessService {
       const batchSize = Math.min(orderIds.length, 10);
       const batch = orderIds.slice(0, batchSize);
       
-      // Querying batch usage
+      // Convert orderNo to esimTranNo for each item (strip leading "B" prefix)
+      const esimTranNoMap = new Map<string, string>();
+      const esimTranNos = batch.map(orderId => {
+        const esimTranNo = this.orderNoToEsimTranNo(orderId);
+        esimTranNoMap.set(esimTranNo, orderId);
+        return esimTranNo;
+      });
+      
+      console.log(`[Usage] Batch querying usage for ${batch.length} eSIMs`);
       
       const payload = {
-        esimTranNoList: batch
+        esimTranNoList: esimTranNos
       };
 
       const { data } = await this.withRetry(() =>
@@ -1154,12 +1175,13 @@ export class EsimAccessService {
         }));
       }
 
-      // Process results
+      // Process results - match by esimTranNo and return with original orderId
       const results = batch.map(orderId => {
-        const usageInfo = data.obj?.esimUsageList?.find(usage => usage.esimTranNo === orderId);
+        const esimTranNo = this.orderNoToEsimTranNo(orderId);
+        const usageInfo = data.obj?.esimUsageList?.find(usage => usage.esimTranNo === esimTranNo);
         
         if (!usageInfo) {
-          console.warn(`[Usage] No usage data found for eSIM ${orderId}`);
+          console.warn(`[Usage] No usage data found for eSIM ${orderId} (esimTranNo: ${esimTranNo})`);
           return {
             orderId,
             success: false,
@@ -1176,8 +1198,6 @@ export class EsimAccessService {
         const totalDataGB = usageInfo.totalData / 1073741824;
         const usagePercentage = totalDataGB > 0 ? (dataUsageGB / totalDataGB) * 100 : 0;
 
-        // Usage data processed
-
         return {
           orderId,
           success: true,
@@ -1189,7 +1209,7 @@ export class EsimAccessService {
         };
       });
 
-      // Batch query completed
+      console.log(`[Usage] Batch query completed: ${results.filter(r => r.success).length}/${results.length} successful`);
       return results;
 
     } catch (err) {
