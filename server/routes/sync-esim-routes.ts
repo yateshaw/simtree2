@@ -336,4 +336,222 @@ router.get("/esim/usage/:orderId", async (req, res) => {
   }
 });
 
+/**
+ * RECONCILIATION ENDPOINT: Import orphan eSIM from provider
+ * Use this when an eSIM exists at the provider but not in our database
+ * (e.g., purchase succeeded at provider but local DB insert failed)
+ */
+router.post("/esim/reconcile", async (req, res) => {
+  try {
+    const { orderId, employeeId, companyId } = req.body;
+    
+    if (!orderId) {
+      return res.status(400).json({ error: "Missing required field: orderId" });
+    }
+    
+    if (!employeeId || !companyId) {
+      return res.status(400).json({ 
+        error: "Missing required fields: employeeId and companyId are required to associate the eSIM" 
+      });
+    }
+    
+    console.log(`[Reconcile] Attempting to import orphan eSIM: ${orderId}`);
+    
+    // Check if eSIM already exists locally
+    const [existingEsim] = await db
+      .select({ id: schema.purchasedEsims.id })
+      .from(schema.purchasedEsims)
+      .where(eq(schema.purchasedEsims.orderId, orderId.toUpperCase()));
+    
+    if (existingEsim) {
+      return res.status(409).json({ 
+        error: `eSIM with orderId ${orderId} already exists in database`,
+        esimId: existingEsim.id
+      });
+    }
+    
+    // Query provider for eSIM details
+    const esimAccessService = new EsimAccessService(storage);
+    const providerData = await esimAccessService.checkEsimStatus(orderId);
+    
+    if (!providerData || !providerData.rawData?.obj?.esimList?.length) {
+      return res.status(404).json({ 
+        error: `No eSIM found at provider with orderId: ${orderId}` 
+      });
+    }
+    
+    const esimInfo = providerData.rawData.obj.esimList[0];
+    const packageInfo = esimInfo.packageList?.[0];
+    
+    console.log(`[Reconcile] Found eSIM at provider:`, {
+      orderId,
+      iccid: esimInfo.iccid,
+      status: esimInfo.esimStatus,
+      packageName: packageInfo?.packageName
+    });
+    
+    // Find matching plan in our database
+    let planId = null;
+    if (packageInfo?.packageCode) {
+      const [plan] = await db
+        .select({ id: schema.esimPlans.id })
+        .from(schema.esimPlans)
+        .where(eq(schema.esimPlans.providerId, packageInfo.packageCode));
+      if (plan) {
+        planId = plan.id;
+      }
+    }
+    
+    // Determine status based on provider status
+    const ACTIVATED_STATUSES = ['ONBOARD', 'ENABLED', 'ACTIVATED', 'IN_USE'];
+    const providerStatus = esimInfo.esimStatus?.toUpperCase();
+    const hasActivateTime = esimInfo.activateTime && esimInfo.activateTime !== 'null';
+    const isActivated = ACTIVATED_STATUSES.includes(providerStatus) || hasActivateTime;
+    const localStatus = isActivated ? 'activated' : 'waiting_for_activation';
+    
+    // Get activation date
+    const activationDate = hasActivateTime 
+      ? new Date(esimInfo.activateTime) 
+      : (isActivated ? new Date() : null);
+    
+    // Get expiry date
+    const expiryDate = esimInfo.expiredTime ? new Date(esimInfo.expiredTime) : null;
+    
+    // Calculate data used (convert from bytes to GB)
+    const dataUsedBytes = esimInfo.orderUsage || 0;
+    const dataUsedGB = (dataUsedBytes / 1073741824).toFixed(4);
+    
+    // Create the purchased_esims record
+    const [newEsim] = await db
+      .insert(schema.purchasedEsims)
+      .values({
+        employeeId: parseInt(employeeId),
+        planId: planId,
+        orderId: orderId.toUpperCase(),
+        iccid: esimInfo.iccid || '',
+        activationCode: esimInfo.ac || null,
+        qrCode: esimInfo.qrCode || null,
+        status: localStatus,
+        purchaseDate: new Date(),
+        activationDate: activationDate,
+        expiryDate: expiryDate,
+        dataUsed: dataUsedGB,
+        metadata: {
+          importedViaReconcile: true,
+          reconcileDate: new Date().toISOString(),
+          providerStatus: providerStatus,
+          smdpStatus: esimInfo.smdpStatus,
+          packageName: packageInfo?.packageName,
+          rawData: providerData.rawData,
+        },
+      })
+      .returning();
+    
+    console.log(`[Reconcile] Successfully imported orphan eSIM:`, {
+      id: newEsim.id,
+      orderId: newEsim.orderId,
+      status: newEsim.status,
+      employeeId: newEsim.employeeId
+    });
+    
+    // Emit event for UI updates
+    emitEvent(EventTypes.ESIM_STATUS_CHANGE, {
+      esimId: newEsim.id,
+      employeeId: newEsim.employeeId,
+      oldStatus: null,
+      newStatus: newEsim.status,
+      orderId: newEsim.orderId,
+      providerStatus: providerStatus,
+      timestamp: new Date().toISOString(),
+      action: 'reconcile_import'
+    });
+    
+    return res.status(201).json({
+      success: true,
+      message: `Successfully imported orphan eSIM ${orderId}`,
+      esim: {
+        id: newEsim.id,
+        orderId: newEsim.orderId,
+        status: newEsim.status,
+        iccid: newEsim.iccid,
+        employeeId: newEsim.employeeId,
+        planId: newEsim.planId,
+        providerStatus: providerStatus,
+        packageName: packageInfo?.packageName
+      }
+    });
+    
+  } catch (error) {
+    console.error("[Reconcile] Error importing orphan eSIM:", error);
+    return res.status(500).json({ 
+      error: "Internal error importing orphan eSIM",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+/**
+ * LOOKUP ENDPOINT: Search for eSIM at provider without importing
+ * Useful to verify an order exists before reconciling
+ */
+router.get("/esim/lookup/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    if (!orderId) {
+      return res.status(400).json({ error: "Missing orderId parameter" });
+    }
+    
+    console.log(`[Lookup] Searching for eSIM at provider: ${orderId}`);
+    
+    // Check if exists locally
+    const [localEsim] = await db
+      .select({
+        id: schema.purchasedEsims.id,
+        orderId: schema.purchasedEsims.orderId,
+        status: schema.purchasedEsims.status,
+        employeeId: schema.purchasedEsims.employeeId
+      })
+      .from(schema.purchasedEsims)
+      .where(eq(schema.purchasedEsims.orderId, orderId.toUpperCase()));
+    
+    // Query provider
+    const esimAccessService = new EsimAccessService(storage);
+    const providerData = await esimAccessService.checkEsimStatus(orderId);
+    
+    const esimInfo = providerData?.rawData?.obj?.esimList?.[0];
+    const packageInfo = esimInfo?.packageList?.[0];
+    
+    return res.status(200).json({
+      orderId,
+      existsLocally: !!localEsim,
+      existsAtProvider: !!esimInfo,
+      localRecord: localEsim || null,
+      providerRecord: esimInfo ? {
+        iccid: esimInfo.iccid,
+        esimStatus: esimInfo.esimStatus,
+        smdpStatus: esimInfo.smdpStatus,
+        packageName: packageInfo?.packageName,
+        packageCode: packageInfo?.packageCode,
+        activateTime: esimInfo.activateTime,
+        expiredTime: esimInfo.expiredTime,
+        orderUsage: esimInfo.orderUsage,
+        totalVolume: esimInfo.totalVolume
+      } : null,
+      isOrphan: !localEsim && !!esimInfo,
+      recommendation: !localEsim && !!esimInfo 
+        ? "This eSIM exists at provider but not locally. Use /api/sync/esim/reconcile to import it."
+        : localEsim && !esimInfo 
+          ? "This eSIM exists locally but not at provider. Provider may have deleted it."
+          : !localEsim && !esimInfo
+            ? "This eSIM does not exist at provider or locally."
+            : "This eSIM is properly synced."
+    });
+    
+  } catch (error) {
+    console.error("[Lookup] Error searching for eSIM:", error);
+    return res.status(500).json({ error: "Internal error searching for eSIM" });
+  }
+});
+
 export default router;
