@@ -141,10 +141,16 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
     if (isEsimActivated(esimStatus, content) && esim.status !== "activated") {
       console.log(`[eSIM Access Webhook] Updating eSIM ${esim.id} status to 'activated'`);
       
+      // Robust timestamp fallback - use provider time if valid, otherwise current time
+      const providerTime = content?.activateTime || content?.installationTime;
+      const isValidTimestamp = providerTime && providerTime !== 'null' && providerTime !== null;
+      const activationDate = isValidTimestamp ? new Date(providerTime) : new Date();
+      console.log(`[eSIM Access Webhook] Using ${isValidTimestamp ? 'provider' : 'current'} time for activation: ${activationDate.toISOString()}`);
+      
       // Update the eSIM status and data usage if available
       const updateData: any = {
         status: "activated",
-        activationDate: new Date(),
+        activationDate: activationDate,
         metadata: {
           ...(esim.metadata || {}),
           status: "activated", // Keep metadata.status in sync with database status
@@ -152,14 +158,17 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
           providerStatus: esimStatus,
           previousStatus: esim.status,
           viaWebhook: true,
+          activationSource: isValidTimestamp ? 'provider' : 'fallback',
         },
       };
       
       // Add data usage info if available - convert bytes to GB for consistency
+      // Using 1024^3 (1073741824) for precise byte to GB conversion
       if (dataUsageFromWebhook !== null) {
-        const usageGB = parseFloat(dataUsageFromWebhook) / (1024 * 1024 * 1024);
+        const usageBytes = parseFloat(dataUsageFromWebhook);
+        const usageGB = usageBytes / 1073741824;
         updateData.dataUsed = usageGB.toFixed(4);
-        console.log(`[eSIM Access Webhook] Including data usage in activation update: ${dataUsageFromWebhook} bytes (${usageGB.toFixed(4)} GB)`);
+        console.log(`[eSIM Access Webhook] Including data usage in activation update: ${usageBytes} bytes (${usageGB.toFixed(4)} GB)`);
       }
       
       // Update in database
@@ -180,19 +189,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
             .where(eq(schema.esimPlans.id, esim.planId));
           
           if (plan) {
-            // Use provider's activation timestamp if available, otherwise fall back to current time
-            let activationDate: Date;
-            if (content?.activateTime && content.activateTime !== 'null') {
-              activationDate = new Date(content.activateTime);
-              console.log(`[eSIM Access Webhook] Using provider activation time: ${content.activateTime}`);
-            } else if (content?.installationTime && content.installationTime !== 'null') {
-              activationDate = new Date(content.installationTime);
-              console.log(`[eSIM Access Webhook] Using provider installation time: ${content.installationTime}`);
-            } else {
-              activationDate = new Date();
-              console.log(`[eSIM Access Webhook] Using current time as activation date`);
-            }
-            
+            // Use the same activationDate calculated above for consistency
             const endDate = new Date(activationDate);
             endDate.setDate(endDate.getDate() + (plan.validity || 30));
             
@@ -389,7 +386,9 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
       
       if (dataUsageFromWebhook !== null) {
         // Convert bytes to GB for consistency with schema expectations
-        const usageGB = parseFloat(dataUsageFromWebhook) / (1024 * 1024 * 1024);
+        // Using 1024^3 (1073741824) for precise byte to GB conversion
+        const usageBytes = parseFloat(dataUsageFromWebhook);
+        const usageGB = usageBytes / 1073741824;
         
         // Update just the data usage
         await db
@@ -406,8 +405,7 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
           })
           .where(eq(schema.purchasedEsims.id, esim.id));
         
-        // Calculate usage percentage for event
-        const usageBytes = parseFloat(dataUsageFromWebhook);
+        // Calculate usage percentage for event (usageBytes already defined above)
         let totalBytes = 0;
         
         if (totalVolume) {
