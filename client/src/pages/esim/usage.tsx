@@ -44,12 +44,47 @@ export default function ESIMUsagePage() {
   
   // Fetch eSIM usage data
   const { data: usageData, isLoading: isLoadingUsage } = useQuery({
-    queryKey: ['/api/admin/esim/usage'],
+    queryKey: ['/api/admin/usage-monitor/usage-overview'],
     queryFn: async () => {
       try {
-        const result = await apiRequest('/api/admin/esim/usage');
-        if (result.success) {
-          return result.data;
+        const result = await apiRequest('/api/admin/usage-monitor/usage-overview');
+        if (result.success && result.data) {
+          // Transform the data to match the expected format
+          const { employees, summary } = result.data;
+          
+          // Get high usage eSIMs (sorted by percentage)
+          const highestUsage: ESIMUsage[] = [];
+          const usageSummary: ESIMUsage[] = [];
+          
+          for (const employee of employees || []) {
+            for (const esim of employee.esims || []) {
+              const usageItem: ESIMUsage = {
+                id: esim.id,
+                employeeId: employee.employeeId,
+                employeeName: employee.employeeName,
+                companyName: employee.companyName,
+                planName: esim.planName,
+                dataLimit: esim.dataLimit,
+                dataUsed: esim.dataUsed,
+                startDate: esim.purchaseDate,
+                expiryDate: esim.expiryDate,
+                status: esim.status,
+                percentage: esim.usagePercentage || 0,
+              };
+              usageSummary.push(usageItem);
+            }
+          }
+          
+          // Sort by percentage for highest usage
+          const sortedByUsage = [...usageSummary].sort((a, b) => b.percentage - a.percentage);
+          
+          return {
+            totalActive: summary?.totalActiveEsims || 0,
+            totalInactive: usageSummary.filter(e => e.status === 'waiting_for_activation' || e.status === 'inactive').length,
+            totalExpired: summary?.totalExpiredEsims || 0,
+            highestUsage: sortedByUsage.slice(0, 5), // Top 5 highest usage
+            usageSummary: usageSummary
+          };
         }
         return {
           totalActive: 0,
