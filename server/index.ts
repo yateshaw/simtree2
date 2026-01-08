@@ -10,7 +10,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { setupAuth } from "./auth";
-import { pool, testDatabaseConnection } from "./db";
+import { pool, testDatabaseConnection, db } from "./db";
+import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import { initializeMonitoring } from "./init-monitoring";
@@ -206,6 +208,94 @@ async function startServer() {
       next();
     });
 
+    // PUBLIC WEBHOOK ENDPOINT - Must be registered BEFORE auth middleware
+    // This allows eSIM Access to validate and send webhooks without authentication
+    app.get('/api/esim/webhook', (req, res) => {
+      log('[eSIM Webhook] GET request - URL verification');
+      res.status(200).json({ 
+        status: 'ok', 
+        message: 'eSIM Access webhook endpoint is active',
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    app.post('/api/esim/webhook', async (req, res) => {
+      log('[eSIM Webhook] POST request received');
+      
+      // Handle verification/test requests from eSIM Access
+      if (!req.body || Object.keys(req.body).length === 0 || req.body.test === true) {
+        log('[eSIM Webhook] Verification request received');
+        return res.status(200).json({ 
+          status: 'ok', 
+          message: 'Webhook endpoint verified',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      try {
+        // Extract data from the webhook payload - handle both direct and nested formats
+        const orderNo = req.body.orderNo || req.body.content?.orderNo;
+        const esimStatus = req.body.esimStatus || req.body.content?.esimStatus;
+        const eventType = req.body.eventType || req.body.notifyType || req.body.content?.eventType;
+        
+        if (!orderNo) {
+          log(`[eSIM Webhook] Invalid webhook: missing orderNo - ${JSON.stringify(req.body)}`);
+          return res.status(400).json({ error: "Invalid webhook: missing orderNo" });
+        }
+        
+        log(`[eSIM Webhook] Processing: status=${esimStatus}, order=${orderNo}, event=${eventType}`);
+        
+        // Find the matching eSIM in our database
+        const [esim] = await db
+          .select()
+          .from(schema.purchasedEsims)
+          .where(eq(schema.purchasedEsims.orderId, orderNo));
+        
+        if (!esim) {
+          log(`[eSIM Webhook] No eSIM found with orderId: ${orderNo}`);
+          return res.status(404).json({ error: "eSIM not found" });
+        }
+        
+        // Status values that represent an activated eSIM
+        const ACTIVATION_STATUSES = ["ONBOARD", "ENABLED", "ACTIVATED", "IN_USE"];
+        const providerStatus = esimStatus?.toUpperCase();
+        
+        // Check if should be activated
+        const shouldActivate = ACTIVATION_STATUSES.includes(providerStatus) ||
+          (req.body.activateTime && req.body.activateTime !== 'null') ||
+          (req.body.installationTime && req.body.installationTime !== 'null');
+        
+        if (shouldActivate && esim.status !== "activated") {
+          log(`[eSIM Webhook] Updating eSIM ${esim.id} from '${esim.status}' to 'activated'`);
+          
+          await db
+            .update(schema.purchasedEsims)
+            .set({
+              status: "activated",
+              activationDate: new Date(),
+              metadata: {
+                ...(typeof esim.metadata === 'object' ? esim.metadata : {}),
+                syncedAt: new Date().toISOString(),
+                providerStatus: esimStatus,
+                previousStatus: esim.status,
+                viaWebhook: true,
+              },
+            })
+            .where(eq(schema.purchasedEsims.id, esim.id));
+          
+          log(`[eSIM Webhook] Successfully updated eSIM ${esim.id} to 'activated'`);
+        } else {
+          log(`[eSIM Webhook] No status change needed for eSIM ${esim.id} (current: ${esim.status})`);
+        }
+        
+        return res.status(200).json({ success: true });
+      } catch (error) {
+        console.error("[eSIM Webhook] Error processing webhook:", error);
+        return res.status(500).json({ error: "Internal error processing webhook" });
+      }
+    });
+    log("Public eSIM webhook endpoint registered (no auth required)");
+
     // Setup Authentication
     log("Setting up authentication...");
     await setupAuth(app);
@@ -220,6 +310,7 @@ async function startServer() {
       // Skip CSRF for webhooks and scheduled tasks (they come from external services)
       if (req.path.startsWith('/api/webhooks') || 
           req.path.startsWith('/webhook') ||
+          req.path.startsWith('/api/esim/webhook') ||
           req.path.startsWith('/api/esim-webhook') ||
           req.path.startsWith('/api/stripe/webhook') ||
           req.path.startsWith('/api/scheduled/') ||
