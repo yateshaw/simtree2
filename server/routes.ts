@@ -261,15 +261,38 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Direct webhook endpoint for eSIM Access (to match the URL configured in eSIM Access dashboard)
+  // GET request handler for URL verification by eSIM Access
+  app.get('/api/esim/webhook', (req, res) => {
+    console.log('[eSIM Access Webhook] GET request received - URL verification');
+    return res.status(200).json({ 
+      status: 'ok', 
+      message: 'eSIM Access webhook endpoint is active',
+      timestamp: new Date().toISOString()
+    });
+  });
+  
   app.post('/api/esim/webhook', async (req, res) => {
     console.log('[eSIM Access Direct Webhook] Received webhook, forwarding to handler');
+    
+    // Handle verification/test requests from eSIM Access
+    if (!req.body || Object.keys(req.body).length === 0 || req.body.test === true) {
+      console.log('[eSIM Access Direct Webhook] Verification request received');
+      return res.status(200).json({ 
+        status: 'ok', 
+        message: 'Webhook endpoint verified',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     // This route forwards the request to the actual webhook handler
     try {
-      // Extract data from the webhook payload
-      const { orderNo, esimStatus, eventType, orderUsage, totalVolume } = req.body;
+      // Extract data from the webhook payload - handle both direct and nested formats
+      let orderNo = req.body.orderNo || req.body.content?.orderNo;
+      let esimStatus = req.body.esimStatus || req.body.content?.esimStatus;
+      let eventType = req.body.eventType || req.body.notifyType || req.body.content?.eventType;
       
       if (!orderNo) {
-        console.warn("[eSIM Access Direct Webhook] Invalid webhook: missing orderNo");
+        console.warn("[eSIM Access Direct Webhook] Invalid webhook: missing orderNo", JSON.stringify(req.body));
         return res.status(400).json({ error: "Invalid webhook: missing orderNo" });
       }
       
@@ -287,7 +310,7 @@ export function registerRoutes(app: Express): Server {
       }
       
       // Status values that represent an activated eSIM
-      const ACTIVATION_STATUSES = ["ONBOARD", "ACTIVATED", "IN_USE"];
+      const ACTIVATION_STATUSES = ["ONBOARD", "ENABLED", "ACTIVATED", "IN_USE"];
       
       // Enhanced activation detection function
       const isEsimActivated = (status: string, webhookData: any) => {
