@@ -4630,29 +4630,59 @@ export function registerRoutes(app: Express): Server {
       
       // Enrich VAT transactions with the correct company name (the client who was charged VAT)
       const enrichedTransactions = await Promise.all(filteredTransactions.map(async (transaction) => {
-        // For VAT transactions, look up the client company from the employee name in the description
-        if (transaction.description?.includes('VAT (5%):') && transaction.description?.includes(' for ')) {
-          const employeeNameMatch = transaction.description.match(/for ([^+\-$]+)(?:[+\-$]|$)/);
-          if (employeeNameMatch && employeeNameMatch[1]) {
-            const employeeName = employeeNameMatch[1].trim();
+        // For VAT transactions, look up the client company via the relatedTransactionId
+        // The VAT transaction links to the company's debit transaction, which is on the company's wallet
+        if (transaction.description?.includes('VAT (5%):')) {
+          // Method 1: Use relatedTransactionId to find the company wallet
+          if (transaction.relatedTransactionId) {
+            const [relatedTx] = await db.select({
+              walletId: schema.walletTransactions.walletId
+            }).from(schema.walletTransactions)
+            .where(eq(schema.walletTransactions.id, transaction.relatedTransactionId));
             
-            // Find the employee in the database
-            const employees = await db.select({
-              id: schema.employees.id,
-              name: schema.employees.name,
-              companyId: schema.employees.companyId
-            }).from(schema.employees)
-            .where(eq(schema.employees.name, employeeName));
-            
-            if (employees.length > 0) {
-              const employee = employees[0];
-              const company = companies.find(c => c.id === employee.companyId);
-              if (company) {
-                return {
-                  ...transaction,
-                  companyName: company.name,
-                  companyId: employee.companyId
-                };
+            if (relatedTx?.walletId) {
+              const [relatedWallet] = await db.select({
+                companyId: schema.wallets.companyId
+              }).from(schema.wallets)
+              .where(eq(schema.wallets.id, relatedTx.walletId));
+              
+              if (relatedWallet?.companyId) {
+                const company = companies.find(c => c.id === relatedWallet.companyId);
+                if (company) {
+                  return {
+                    ...transaction,
+                    companyName: company.name,
+                    companyId: relatedWallet.companyId
+                  };
+                }
+              }
+            }
+          }
+          
+          // Method 2: Fallback to employee name lookup if relatedTransactionId didn't work
+          if (transaction.description?.includes(' for ')) {
+            const employeeNameMatch = transaction.description.match(/for ([^+\-$]+)(?:[+\-$]|$)/);
+            if (employeeNameMatch && employeeNameMatch[1]) {
+              const employeeName = employeeNameMatch[1].trim();
+              
+              // Find the employee in the database
+              const employees = await db.select({
+                id: schema.employees.id,
+                name: schema.employees.name,
+                companyId: schema.employees.companyId
+              }).from(schema.employees)
+              .where(eq(schema.employees.name, employeeName));
+              
+              if (employees.length > 0) {
+                const employee = employees[0];
+                const company = companies.find(c => c.id === employee.companyId);
+                if (company) {
+                  return {
+                    ...transaction,
+                    companyName: company.name,
+                    companyId: employee.companyId
+                  };
+                }
               }
             }
           }
