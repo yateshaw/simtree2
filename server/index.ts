@@ -202,18 +202,23 @@ async function startServer() {
       useMemoryStorage = true;
     }
 
-    // Set API response headers first
-    app.use("/api", (req, res, next) => {
-      res.setHeader("Content-Type", "application/json");
-      next();
-    });
-
-    // PUBLIC WEBHOOK ENDPOINT - Must be registered BEFORE auth middleware
+    // PUBLIC WEBHOOK ENDPOINT - Must be registered BEFORE auth middleware AND before API header middleware
     // This allows eSIM Access to validate and send webhooks without authentication
     app.get('/api/esim/webhook', (req, res) => {
       log('[eSIM Webhook] GET request - URL verification');
-      // Try plain text response for validation - some services prefer this
+      // Return plain text with proper content type
+      res.setHeader('Content-Type', 'text/plain');
       res.status(200).send('OK');
+    });
+    
+    // Set API response headers (but webhook is already handled above)
+    app.use("/api", (req, res, next) => {
+      // Skip setting JSON content type for webhook endpoint (already handled)
+      if (req.path === '/esim/webhook') {
+        return next();
+      }
+      res.setHeader("Content-Type", "application/json");
+      next();
     });
     
     app.post('/api/esim/webhook', async (req, res) => {
