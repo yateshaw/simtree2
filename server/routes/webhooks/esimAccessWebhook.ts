@@ -81,7 +81,8 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
     }
     
     // Status values that represent an activated eSIM
-    const ACTIVATION_STATUSES = ["ONBOARD", "ACTIVATED", "IN_USE"];
+    // ONBOARD and ENABLED are the most reliable activation indicators from eSIM Access
+    const ACTIVATION_STATUSES = ["ONBOARD", "ENABLED", "ACTIVATED", "IN_USE"];
     
     // Status values that represent an expired, depleted, or disabled eSIM
     const EXPIRED_STATUSES = ["EXPIRED", "DEPLETED", "DISABLED"];
@@ -93,8 +94,9 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
     const isEsimActivated = (status: string, webhookData: any) => {
       const providerStatus = status?.toUpperCase();
       
-      // Direct activation statuses
+      // Direct activation statuses - ONBOARD and ENABLED are primary indicators
       if (ACTIVATION_STATUSES.includes(providerStatus)) {
+        console.log(`[eSIM Access Webhook] Activation detected via status: ${providerStatus}`);
         return true;
       }
       
@@ -274,7 +276,6 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
         await db
           .update(schema.employees)
           .set({
-            currentPlan: null,
             planStartDate: null,
             planEndDate: null,
             planValidity: null,
@@ -350,7 +351,6 @@ router.post("/webhook", verifyEsimWebhookSignature, async (req, res) => {
           await db
             .update(schema.employees)
             .set({
-              currentPlan: null,
               planStartDate: null,
               planEndDate: null,
               planValidity: null,
