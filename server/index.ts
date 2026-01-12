@@ -202,14 +202,23 @@ async function startServer() {
       useMemoryStorage = true;
     }
 
-    // PUBLIC WEBHOOK ENDPOINT - Must be registered BEFORE auth middleware AND before API header middleware
+    // PUBLIC WEBHOOK ENDPOINTS - Must be registered BEFORE auth middleware AND before API header middleware
     // This allows eSIM Access to validate and send webhooks without authentication
-    app.get('/api/esim/webhook', (req, res) => {
+    // Multiple URL options in case eSIM Access has specific URL format requirements
+    
+    const webhookGetHandler = (req: any, res: any) => {
       log('[eSIM Webhook] GET request - URL verification');
-      // Return plain text with proper content type
       res.setHeader('Content-Type', 'text/plain');
       res.status(200).send('OK');
-    });
+    };
+    
+    // Original path
+    app.get('/api/esim/webhook', webhookGetHandler);
+    // Alternative paths to try (all under /api to avoid Vite catch-all)
+    app.get('/api/webhook/esim', webhookGetHandler);
+    app.get('/api/esim-callback', webhookGetHandler);
+    app.get('/api/notify', webhookGetHandler);
+    app.get('/api/callback', webhookGetHandler);
     
     // Set API response headers (but webhook is already handled above)
     app.use("/api", (req, res, next) => {
@@ -221,7 +230,7 @@ async function startServer() {
       next();
     });
     
-    app.post('/api/esim/webhook', async (req, res) => {
+    const webhookPostHandler = async (req: any, res: any) => {
       log('[eSIM Webhook] POST request received');
       
       // Handle verification/test requests from eSIM Access
@@ -295,8 +304,16 @@ async function startServer() {
         console.error("[eSIM Webhook] Error processing webhook:", error);
         return res.status(500).json({ error: "Internal error processing webhook" });
       }
-    });
-    log("Public eSIM webhook endpoint registered (no auth required)");
+    };
+    
+    // Register POST handlers for all webhook paths
+    app.post('/api/esim/webhook', webhookPostHandler);
+    app.post('/api/webhook/esim', webhookPostHandler);
+    app.post('/api/esim-callback', webhookPostHandler);
+    app.post('/api/notify', webhookPostHandler);
+    app.post('/api/callback', webhookPostHandler);
+    
+    log("Public eSIM webhook endpoints registered (no auth required)");
 
     // Setup Authentication
     log("Setting up authentication...");
