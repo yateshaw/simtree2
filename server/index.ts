@@ -204,21 +204,44 @@ async function startServer() {
 
     // PUBLIC WEBHOOK ENDPOINTS - Must be registered BEFORE auth middleware AND before API header middleware
     // This allows eSIM Access to validate and send webhooks without authentication
-    // Multiple URL options in case eSIM Access has specific URL format requirements
+    // Support ALL HTTP methods (GET, HEAD, OPTIONS, POST) for webhook validation
     
-    const webhookGetHandler = (req: any, res: any) => {
-      log('[eSIM Webhook] GET request - URL verification');
-      res.setHeader('Content-Type', 'text/plain');
-      res.status(200).send('OK');
+    const webhookValidationHandler = (req: any, res: any) => {
+      log(`[eSIM Webhook] ${req.method} request - URL verification from ${req.ip}`);
+      
+      // Handle OPTIONS (CORS preflight)
+      if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, RT-AccessCode, RT-Signature, RT-Timestamp, RT-RequestID');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        return res.status(200).end();
+      }
+      
+      // Handle HEAD (no body, just headers)
+      if (req.method === 'HEAD') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Webhook-Status', 'active');
+        return res.status(200).end();
+      }
+      
+      // Handle GET - return JSON for better compatibility
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.status(200).json({ 
+        success: true, 
+        status: 'active',
+        message: 'Webhook endpoint ready'
+      });
     };
     
-    // Original path
-    app.get('/api/esim/webhook', webhookGetHandler);
-    // Alternative paths to try (all under /api to avoid Vite catch-all)
-    app.get('/api/webhook/esim', webhookGetHandler);
-    app.get('/api/esim-callback', webhookGetHandler);
-    app.get('/api/notify', webhookGetHandler);
-    app.get('/api/callback', webhookGetHandler);
+    // Register all methods for the webhook path
+    app.all('/api/esim/webhook', (req, res, next) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+        return webhookValidationHandler(req, res);
+      }
+      next();
+    });
     
     // Set API response headers (but webhook is already handled above)
     app.use("/api", (req, res, next) => {
@@ -306,12 +329,8 @@ async function startServer() {
       }
     };
     
-    // Register POST handlers for all webhook paths
+    // Register POST handler for the webhook path
     app.post('/api/esim/webhook', webhookPostHandler);
-    app.post('/api/webhook/esim', webhookPostHandler);
-    app.post('/api/esim-callback', webhookPostHandler);
-    app.post('/api/notify', webhookPostHandler);
-    app.post('/api/callback', webhookPostHandler);
     
     log("Public eSIM webhook endpoints registered (no auth required)");
 
