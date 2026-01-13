@@ -254,30 +254,41 @@ async function startServer() {
     });
     
     const webhookPostHandler = async (req: any, res: any) => {
-      log('[eSIM Webhook] POST request received');
+      log(`[eSIM Webhook] POST request received: ${JSON.stringify(req.body)}`);
       
-      // Handle verification/test requests from eSIM Access
-      if (!req.body || Object.keys(req.body).length === 0 || req.body.test === true) {
-        log('[eSIM Webhook] Verification request received');
+      // Handle CHECK_HEALTH validation from eSIM Access (sent when saving webhook URL)
+      if (req.body?.notifyType === 'CHECK_HEALTH') {
+        log('[eSIM Webhook] CHECK_HEALTH validation received - responding with success');
         return res.status(200).json({ 
-          status: 'ok', 
-          message: 'Webhook endpoint verified',
-          timestamp: new Date().toISOString()
+          success: true,
+          message: 'Webhook endpoint validated successfully'
+        });
+      }
+      
+      // Handle empty or test requests
+      if (!req.body || Object.keys(req.body).length === 0 || req.body.test === true) {
+        log('[eSIM Webhook] Empty/test request received');
+        return res.status(200).json({ 
+          success: true,
+          message: 'Webhook endpoint ready'
         });
       }
       
       try {
-        // Extract data from the webhook payload - handle both direct and nested formats
-        const orderNo = req.body.orderNo || req.body.content?.orderNo;
-        const esimStatus = req.body.esimStatus || req.body.content?.esimStatus;
-        const eventType = req.body.eventType || req.body.notifyType || req.body.content?.eventType;
+        // Extract data from the webhook payload according to eSIM Access documentation
+        const notifyType = req.body.notifyType;
+        const content = req.body.content || {};
+        const orderNo = content.orderNo;
+        const esimStatus = content.esimStatus;
+        const smdpStatus = content.smdpStatus;
+        const iccid = content.iccid;
+        
+        log(`[eSIM Webhook] Processing: notifyType=${notifyType}, orderNo=${orderNo}, esimStatus=${esimStatus}, smdpStatus=${smdpStatus}`);
         
         if (!orderNo) {
-          log(`[eSIM Webhook] Invalid webhook: missing orderNo - ${JSON.stringify(req.body)}`);
-          return res.status(400).json({ error: "Invalid webhook: missing orderNo" });
+          log(`[eSIM Webhook] Missing orderNo in webhook payload`);
+          return res.status(200).json({ success: true, message: 'Acknowledged (no orderNo)' });
         }
-        
-        log(`[eSIM Webhook] Processing: status=${esimStatus}, order=${orderNo}, event=${eventType}`);
         
         // Find the matching eSIM in our database
         const [esim] = await db
@@ -287,37 +298,73 @@ async function startServer() {
         
         if (!esim) {
           log(`[eSIM Webhook] No eSIM found with orderId: ${orderNo}`);
-          return res.status(404).json({ error: "eSIM not found" });
+          // Still return 200 to acknowledge receipt
+          return res.status(200).json({ success: true, message: 'eSIM not found in our system' });
         }
         
-        // Status values that represent an activated eSIM
-        const ACTIVATION_STATUSES = ["ONBOARD", "ENABLED", "ACTIVATED", "IN_USE"];
-        const providerStatus = esimStatus?.toUpperCase();
+        // Determine new status based on notifyType and status values
+        let newStatus = esim.status;
         
-        // Check if should be activated
-        const shouldActivate = ACTIVATION_STATUSES.includes(providerStatus) ||
-          (req.body.activateTime && req.body.activateTime !== 'null') ||
-          (req.body.installationTime && req.body.installationTime !== 'null');
+        // Handle different notification types according to eSIM Access docs
+        switch (notifyType) {
+          case 'ORDER_STATUS':
+            // GOT_RESOURCE means eSIM is ready
+            if (content.orderStatus === 'GOT_RESOURCE') {
+              log(`[eSIM Webhook] eSIM ${esim.id} is ready (GOT_RESOURCE)`);
+            }
+            break;
+            
+          case 'SMDP_EVENT':
+            // Real-time eSIM profile lifecycle events
+            if (['ENABLED', 'INSTALLATION', 'DOWNLOAD'].includes(smdpStatus)) {
+              newStatus = 'activated';
+            }
+            break;
+            
+          case 'ESIM_STATUS':
+            // eSIM lifecycle changes
+            if (esimStatus === 'IN_USE') {
+              newStatus = 'activated';
+            } else if (['USED_UP', 'USED_EXPIRED', 'UNUSED_EXPIRED'].includes(esimStatus)) {
+              newStatus = 'expired';
+            } else if (['CANCEL', 'REVOKED'].includes(esimStatus)) {
+              newStatus = 'cancelled';
+            }
+            break;
+            
+          case 'DATA_USAGE':
+            // Data usage notifications - just log for now
+            log(`[eSIM Webhook] Data usage update for ${esim.id}: ${content.orderUsage}/${content.totalVolume} bytes`);
+            break;
+            
+          case 'VALIDITY_USAGE':
+            // Validity running out
+            log(`[eSIM Webhook] Validity warning for ${esim.id}: ${content.remain} ${content.durationUnit} remaining`);
+            break;
+        }
         
-        if (shouldActivate && esim.status !== "activated") {
-          log(`[eSIM Webhook] Updating eSIM ${esim.id} from '${esim.status}' to 'activated'`);
+        // Update status if changed
+        if (newStatus !== esim.status) {
+          log(`[eSIM Webhook] Updating eSIM ${esim.id} from '${esim.status}' to '${newStatus}'`);
           
           await db
             .update(schema.purchasedEsims)
             .set({
-              status: "activated",
-              activationDate: new Date(),
+              status: newStatus,
+              activationDate: newStatus === 'activated' ? new Date() : esim.activationDate,
               metadata: {
                 ...(typeof esim.metadata === 'object' ? esim.metadata : {}),
                 syncedAt: new Date().toISOString(),
-                providerStatus: esimStatus,
+                lastNotifyType: notifyType,
+                providerEsimStatus: esimStatus,
+                providerSmdpStatus: smdpStatus,
                 previousStatus: esim.status,
                 viaWebhook: true,
               },
             })
             .where(eq(schema.purchasedEsims.id, esim.id));
           
-          log(`[eSIM Webhook] Successfully updated eSIM ${esim.id} to 'activated'`);
+          log(`[eSIM Webhook] Successfully updated eSIM ${esim.id} to '${newStatus}'`);
         } else {
           log(`[eSIM Webhook] No status change needed for eSIM ${esim.id} (current: ${esim.status})`);
         }
@@ -325,7 +372,8 @@ async function startServer() {
         return res.status(200).json({ success: true });
       } catch (error) {
         console.error("[eSIM Webhook] Error processing webhook:", error);
-        return res.status(500).json({ error: "Internal error processing webhook" });
+        // Still return 200 to prevent retries
+        return res.status(200).json({ success: true, error: 'Internal processing error' });
       }
     };
     
