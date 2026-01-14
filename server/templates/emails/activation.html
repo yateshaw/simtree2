@@ -241,6 +241,17 @@
         <p style="font-size: 14px; color: #718096;"><strong>Note:</strong> Menu names may vary by device manufacturer</p>
       </div>
       
+      {{#if usageMonitoringUrl}}
+      <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 6px solid #0ea5e9; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">
+        <h3 style="color: #0369a1; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">📊 Track Your Data Usage</h3>
+        <p style="color: #0c4a6e; margin: 0 0 20px 0;">Monitor your eSIM data consumption in real-time. See how much data you've used and how much remains.</p>
+        <div style="text-align: center;">
+          <a href="{{usageMonitoringUrl}}" style="display: inline-block; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">📈 View Usage Dashboard</a>
+        </div>
+        <p style="text-align: center; font-size: 13px; color: #64748b; margin: 15px 0 0 0;">This link is unique to your eSIM. Bookmark it for easy access!</p>
+      </div>
+      {{/if}}
+      
       <div class="info-box">
         <h3>🛠️ Troubleshooting</h3>
         <ul>

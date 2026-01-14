@@ -572,6 +572,7 @@ export const sendActivationEmail = async (
         activationUrl,
         activationCode: activationCodeForEmail,
         planDetails: emailData.planDetails,
+        usageMonitoringUrl: usageMonitoringUrl,
         year: new Date().getFullYear()
       });
     } catch (templateError) {
