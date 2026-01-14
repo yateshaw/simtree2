@@ -8,6 +8,181 @@ import { EsimAccessService } from "../../services/esim-access";
 
 const router = express.Router();
 
+/**
+ * Robust provider status extraction supporting multiple API response formats
+ * Mirrors the frontend logic in employeeUtils.ts
+ */
+function extractProviderStatus(rawData: any): string | null {
+  if (!rawData) return null;
+  
+  let parsedData = rawData;
+  
+  // Handle string rawData by parsing JSON
+  if (typeof rawData === 'string') {
+    try {
+      parsedData = JSON.parse(rawData);
+    } catch {
+      return null;
+    }
+  }
+  
+  // Handle object rawData with comprehensive pattern matching
+  if (typeof parsedData === 'object') {
+    // Pattern 1: obj.esimList[0].esimStatus (primary provider format)
+    if (parsedData.obj?.esimList?.[0]?.esimStatus) {
+      return parsedData.obj.esimList[0].esimStatus;
+    }
+    
+    // Pattern 2: Direct esimStatus field
+    if (parsedData.esimStatus) {
+      return parsedData.esimStatus;
+    }
+    
+    // Pattern 3: esimList array directly
+    if (Array.isArray(parsedData.esimList) && parsedData.esimList[0]?.esimStatus) {
+      return parsedData.esimList[0].esimStatus;
+    }
+    
+    // Pattern 4: Nested data structures
+    if (parsedData.data?.esimStatus) {
+      return parsedData.data.esimStatus;
+    }
+    
+    // Pattern 5: Response wrapper
+    if (parsedData.response?.esimStatus) {
+      return parsedData.response.esimStatus;
+    }
+    
+    // Pattern 6: Alternative nested paths
+    if (parsedData.result?.esimStatus) {
+      return parsedData.result.esimStatus;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * SYSTEM-WIDE eSIM cancellation detection (backend version)
+ * Mirrors the frontend logic in employeeUtils.ts EXACTLY
+ */
+function isEsimCancelledOrRefunded(esim: any): boolean {
+  if (!esim) return false;
+  
+  // LAYER 1: Database status - primary source of truth
+  if (esim.status === 'cancelled') {
+    return true;
+  }
+  
+  // LAYER 2: Frontend cancellation flags
+  if (esim.isCancelled === true) {
+    return true;
+  }
+  
+  // LAYER 3: Comprehensive metadata analysis
+  const metadata = esim.metadata as any;
+  if (metadata) {
+    // Direct cancellation indicators
+    if (metadata.isCancelled === true || 
+        metadata.refunded === true ||
+        metadata.status === 'cancelled') {
+      return true;
+    }
+    
+    // Cancellation timestamp presence indicates cancellation
+    if (metadata.cancelledAt || 
+        metadata.cancelRequestTime ||
+        metadata.refundDate ||
+        metadata.cancelledInProvider === true) {
+      return true;
+    }
+    
+    // Refund completion indicators
+    if (metadata.pendingRefund === false && metadata.refunded === true) {
+      return true;
+    }
+    
+    // Previous status checks
+    if (metadata.previousStatus === 'cancelled') {
+      return true;
+    }
+    
+    // LAYER 4: Provider API status analysis
+    if (metadata.rawData) {
+      const providerStatus = extractProviderStatus(metadata.rawData);
+      
+      // Only consider truly cancelled provider statuses
+      const cancelledStatuses = [
+        'CANCEL', 'CANCELLED', 'REVOKED', 'TERMINATED', 
+        'SUSPENDED', 'INACTIVE', 'DISABLED', 'EXPIRED_CANCELLED'
+        // Removed 'USED_EXPIRED' - this can be a valid activated state
+        // Note: 'RELEASED' is NOT cancelled - it means ready for activation
+      ];
+      
+      // IMPORTANT: Don't mark as cancelled if the main status is waiting_for_activation or activated
+      if (esim.status === 'waiting_for_activation' || esim.status === 'activated') {
+        // Don't check provider status for valid eSIMs - they are valid regardless of provider status
+        return false;
+      } else if (providerStatus && cancelledStatuses.includes(providerStatus)) {
+        return true;
+      }
+    }
+  }
+  
+  // LAYER 5: Time-based expiration check for activated eSIMs
+  if (esim.status === 'activated' && esim.planValidity && esim.activationDate) {
+    const activationDate = new Date(esim.activationDate);
+    const expiryDate = new Date(activationDate);
+    expiryDate.setDate(expiryDate.getDate() + esim.planValidity);
+    
+    const now = new Date();
+    if (now > expiryDate) {
+      return true;
+    }
+  }
+  
+  // LAYER 6: Status exclusions (don't treat certain statuses as cancelled)
+  if (esim.status === 'error') {
+    return false; // Error status doesn't mean cancelled, just needs attention
+  }
+  
+  return false;
+}
+
+/**
+ * Check if eSIM is expired based on provider status
+ */
+function isProviderStatusExpired(metadata: any): boolean {
+  if (!metadata?.rawData) return false;
+  
+  const providerStatus = extractProviderStatus(metadata.rawData);
+  
+  // Exclude eSIMs with expired provider statuses
+  return providerStatus === 'USED_EXPIRED' || providerStatus === 'EXPIRED';
+}
+
+/**
+ * Check if eSIM should be considered "active" using comprehensive detection
+ */
+function isEsimActive(esim: any): boolean {
+  // Must have active status
+  if (esim.status !== 'activated' && esim.status !== 'active') {
+    return false;
+  }
+  
+  // Must not be cancelled or refunded
+  if (isEsimCancelledOrRefunded(esim)) {
+    return false;
+  }
+  
+  // Must not be expired according to provider
+  if (isProviderStatusExpired(esim.metadata)) {
+    return false;
+  }
+  
+  return true;
+}
+
 // Interface for usage monitoring data
 interface EmployeeUsageData {
   employeeId: number;
@@ -134,7 +309,8 @@ router.get("/usage-overview", requireAuth, requireAdmin, async (req, res) => {
 
       // Check if expired
       const isExpired = esim.expiryDate && new Date(esim.expiryDate) < new Date();
-      const isActive = esim.status === 'activated' || esim.status === 'active';
+      // Use comprehensive active detection (checks cancellation + provider status)
+      const isActive = isEsimActive(esim);
 
       // Check if plan is depleted (100% usage) for more than 24 hours
       const isDepleted = usagePercentage >= 100;
@@ -615,10 +791,10 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
         employee.totalDataLimit += dataLimit;
         employee.totalDataUsed += dataUsed;
         
-        // Count active and expired eSIMs only for non-hidden plans
-        if (esim.status === 'activated' || esim.status === 'active') {
+        // Count active and expired eSIMs using comprehensive detection
+        if (isEsimActive(esim)) {
           employee.activeEsimsCount++;
-        } else if (esim.status === 'expired' || esim.status === 'cancelled') {
+        } else if (esim.status === 'expired' || esim.status === 'cancelled' || isEsimCancelledOrRefunded(esim)) {
           employee.expiredEsimsCount++;
         }
       }
