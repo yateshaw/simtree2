@@ -811,7 +811,14 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
       }
     }
 
-    const employeeData = employees.sort((a, b) => 
+    // Filter to only show employees with at least one active or waiting eSIM
+    const employeesWithActiveOrWaiting = employees.filter(employee => {
+      const hasActiveEsim = employee.activeEsimsCount > 0;
+      const hasWaitingEsim = employee.esims.some(e => e.status === 'waiting_for_activation');
+      return hasActiveEsim || hasWaitingEsim;
+    });
+
+    const employeeData = employeesWithActiveOrWaiting.sort((a, b) => 
       b.totalUsagePercentage - a.totalUsagePercentage
     );
 
@@ -822,7 +829,7 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
     const totalDataUsed = employeeData.reduce((sum, exec) => sum + exec.totalDataUsed, 0);
     const averageUsagePercentage = totalDataLimit > 0 ? Math.round((totalDataUsed / totalDataLimit) * 100) : 0;
 
-    console.log(`[Usage Monitor] Retrieved company ${companyId} data for ${employeeData.length} employees`);
+    console.log(`[Usage Monitor] Retrieved company ${companyId} data for ${employeeData.length} employees (filtered from ${employees.length} total)`);
 
     res.json({
       success: true,
