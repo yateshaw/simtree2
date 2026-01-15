@@ -3,12 +3,14 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
+
 jobs:
   backup:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install PostgreSQL 17 client
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -16,8 +18,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: npm install --no-save googleapis
+
       - name: Run Daily FULL Backup
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -29,16 +33,45 @@ jobs:
           import { exec } from 'child_process';
           import { createReadStream, unlinkSync } from 'fs';
           import { promisify } from 'util';
+
           const execAsync = promisify(exec);
+
           async function run() {
             const fileName = `simtree-daily-FULL-${new Date().toISOString().split('T')[0]}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
-            await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl | gzip -9 > ${filePath}`);
-            const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
-            const drive = google.drive({ version: 'v3', auth });
-            await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
-            unlinkSync(filePath);
+            
+            try {
+              // Forzamos el volcado completo de datos y esquemas
+              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --verbose | gzip -9 > ${filePath}`);
+              
+              const auth = new google.auth.GoogleAuth({ 
+                credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), 
+                scopes: ['https://www.googleapis.com/auth/drive'] 
+              });
+              
+              const drive = google.drive({ version: 'v3', auth });
+              
+              console.log(`Subiendo archivo: ${fileName}`);
+              await drive.files.create({ 
+                requestBody: { 
+                  name: fileName, 
+                  parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] 
+                }, 
+                media: { 
+                  mimeType: 'application/gzip', 
+                  body: createReadStream(filePath) 
+                }, 
+                supportsAllDrives: true 
+              });
+              
+              console.log("Subida completada con éxito.");
+              unlinkSync(filePath);
+            } catch (error) {
+              console.error("Error durante el backup:", error);
+              process.exit(1);
+            }
           }
+
           run();
           EOF
           node backup.mjs
