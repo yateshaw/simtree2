@@ -1,0 +1,72 @@
+name: DB Backup - Monthly
+on:
+  schedule:
+    - cron: '0 8 1 * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install --no-save googleapis @sendgrid/mail
+      - name: Run Monthly Backup
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_MONTHLY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
+        run: |
+          cat > backup.mjs << 'EOF'
+          import { google } from 'googleapis';
+          import { exec } from 'child_process';
+          import { createReadStream, unlinkSync, existsSync } from 'fs';
+          import { promisify } from 'util';
+          import sgMail from '@sendgrid/mail';
+          const execAsync = promisify(exec);
+
+          const { DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID, SENDGRID_API_KEY, FROM_EMAIL, NOTIFICATION_EMAIL } = process.env;
+
+          async function task() {
+            const fileName = `simtree-monthly-${new Date().toISOString().split('T')[0]}.sql.gz`;
+            const filePath = `/tmp/${fileName}`;
+            await execAsync(`pg_dump "${DATABASE_URL}" --no-owner --no-acl | gzip -9 > ${filePath}`);
+            
+            const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
+            const drive = google.drive({ version: 'v3', auth });
+            
+            await drive.files.create({ requestBody: { name: fileName, parents: [GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
+            
+            const list = await drive.files.list({ q: `'${GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed=false`, orderBy: 'createdTime asc', supportsAllDrives: true, includeItemsFromAllDrives: true });
+            const files = list.data.files || [];
+            if (files.length > 12) {
+              for (const f of files.slice(0, files.length - 12)) {
+                await drive.files.update({ fileId: f.id, requestBody: { trashed: true }, supportsAllDrives: true });
+              }
+            }
+            if (existsSync(filePath)) unlinkSync(filePath);
+          }
+
+          async function run() {
+            let attempt = 1;
+            while (attempt <= 3) {
+              try { await task(); return; } 
+              catch (e) {
+                if (attempt === 3) {
+                  sgMail.setApiKey(SENDGRID_API_KEY);
+                  await sgMail.send({ to: NOTIFICATION_EMAIL, from: FROM_EMAIL, subject: "🚨 ALERT: Monthly Backup Failed", text: e.message });
+                } else { await new Promise(r => setTimeout(r, 15000)); attempt++; }
+              }
+            }
+          }
+          run();
+          EOF
+          node backup.mjs
