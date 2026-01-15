@@ -3,7 +3,6 @@ on:
   schedule:
     - cron: '0 20 * * 5'
   workflow_dispatch:
-
 jobs:
   report:
     runs-on: ubuntu-24.04
@@ -28,42 +27,19 @@ jobs:
           import { google } from 'googleapis';
           import sgMail from '@sendgrid/mail';
           const { GOOGLE_SERVICE_ACCOUNT_JSON, SENDGRID_API_KEY, FROM_EMAIL, NOTIFICATION_EMAIL, GOOGLE_DRIVE_FOLDER_ID_HOURLY, GOOGLE_DRIVE_FOLDER_ID_DAILY, GOOGLE_DRIVE_FOLDER_ID_MONTHLY } = process.env;
-
           async function run() {
             const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
             const drive = google.drive({ version: 'v3', auth });
             const summary = [];
-            const folders = [
-              { t: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY, p: '30 backups' },
-              { t: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY, p: '12 backups' },
-              { t: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY, p: '48 backups' }
-            ];
+            const folders = [{ t: 'Daily', id: GOOGLE_DRIVE_FOLDER_ID_DAILY }, { t: 'Monthly', id: GOOGLE_DRIVE_FOLDER_ID_MONTHLY }, { t: 'Hourly', id: GOOGLE_DRIVE_FOLDER_ID_HOURLY }];
             for (const f of folders) {
               const res = await drive.files.list({ q: `'${f.id}' in parents and trashed=false`, fields: 'files(size)', supportsAllDrives: true, includeItemsFromAllDrives: true });
               const files = res.data.files || [];
               const size = (files.reduce((a, b) => a + parseInt(b.size || 0), 0) / 1024 / 1024).toFixed(2);
-              summary.push({ type: f.t, count: files.length, size: `${size} MB`, policy: f.p });
+              summary.push({ type: f.t, count: files.length, size: `${size} MB` });
             }
-            const html = `
-            <div style="background-color: #1a1a1a; color: #ffffff; padding: 20px; font-family: sans-serif; border-radius: 8px;">
-              <h2 style="color: #4caf50;">📊 SimTree Weekly Backup Summary</h2>
-              <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #e0e0e0; background-color: #262626;">
-                <thead>
-                  <tr style="background-color: #333; text-align: left;">
-                    <th style="padding: 10px; border: 1px solid #444;">Type</th>
-                    <th style="padding: 10px; border: 1px solid #444;">Total Backups</th>
-                    <th style="padding: 10px; border: 1px solid #444;">Storage Used</th>
-                    <th style="padding: 10px; border: 1px solid #444;">Policy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${summary.map(r => `<tr><td style="padding:10px;border:1px solid #444;">${r.type}</td><td style="padding:10px;border:1px solid #444;">${r.count}</td><td style="padding:10px;border:1px solid #444;">${r.size}</td><td style="padding:10px;border:1px solid #444;">${r.policy}</td></tr>`).join('')}
-                </tbody>
-              </table>
-              <p style="margin-top: 20px;">System status: ✅ Operational</p>
-            </div>`;
             sgMail.setApiKey(SENDGRID_API_KEY);
-            await sgMail.send({ to: NOTIFICATION_EMAIL, from: FROM_EMAIL, subject: "SimTree Weekly Backup Summary", html });
+            await sgMail.send({ to: NOTIFICATION_EMAIL, from: FROM_EMAIL, subject: "SimTree Weekly Backup Summary", html: `<h2>SimTree Backup Report</h2><table border="1"><tr><th>Type</th><th>Count</th><th>Size</th></tr>${summary.map(s => `<tr><td>${s.type}</td><td>${s.count}</td><td>${s.size}</td></tr>`).join('')}</table>` });
           }
           run();
           EOF
