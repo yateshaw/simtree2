@@ -19,6 +19,10 @@ jobs:
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
 
+      # 🔧 AGREGADO: Instalar dependencias de Node.js
+      - name: Install Node.js dependencies
+        run: npm install --no-save googleapis
+
       - name: Run Daily FULL Backup
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -40,7 +44,7 @@ jobs:
             try {
               console.log('🔄 Starting full database backup...');
               
-              // CORRECCIÓN CRÍTICA: Agregar --format=plain y especificar explícitamente que queremos datos
+              // COMANDO CORREGIDO con --format=plain y --schema=public
               const dumpCommand = `pg_dump "${process.env.DATABASE_URL}" \
                 --format=plain \
                 --schema=public \
@@ -65,12 +69,12 @@ jobs:
               const sizeKB = (stats.size / 1024).toFixed(2);
               console.log(`📦 Backup file size: ${sizeKB} KB`);
 
-              // VALIDACIÓN CRÍTICA: El backup debe ser >500 KB para ser válido
+              // VALIDACIÓN: El backup debe ser >500 KB
               if (stats.size < 500000) {
                 console.error('⚠️ CRITICAL: Backup file is too small!');
                 console.error(`Expected: >500 KB, Got: ${sizeKB} KB`);
                 
-                // Intentar obtener más información
+                // Mostrar contenido para debug
                 console.error('Decompressing to check contents...');
                 await execAsync(`gunzip -c ${filePath} | head -100`).then(
                   ({ stdout }) => console.error('First 100 lines:', stdout)
