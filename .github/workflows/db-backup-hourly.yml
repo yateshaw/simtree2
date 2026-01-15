@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+
 jobs:
   backup:
     runs-on: ubuntu-24.04
@@ -18,7 +19,7 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: npm install --no-save googleapis
-      - name: Run Hourly Backup
+      - name: Run Hourly Backup (Tables Only)
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -33,11 +34,14 @@ jobs:
           async function run() {
             const fileName = `simtree-hourly-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
-            await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl -t wallets -t wallet_transactions -t purchased_esims | gzip -9 > ${filePath}`);
-            const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
-            const drive = google.drive({ version: 'v3', auth });
-            await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
-            unlinkSync(filePath);
+            try {
+              // Filtramos solo las tablas críticas según tu SQL
+              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl -t wallets -t wallet_transactions -t purchased_esims | gzip -9 > ${filePath}`);
+              const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
+              const drive = google.drive({ version: 'v3', auth });
+              await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
+              unlinkSync(filePath);
+            } catch (error) { console.error(error); process.exit(1); }
           }
           run();
           EOF
