@@ -14,6 +14,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: npm install --no-save googleapis @sendgrid/mail
       - name: Run Hourly Backup
@@ -32,20 +39,15 @@ jobs:
           import { promisify } from 'util';
           import sgMail from '@sendgrid/mail';
           const execAsync = promisify(exec);
-
           const { DATABASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID, SENDGRID_API_KEY, FROM_EMAIL, NOTIFICATION_EMAIL } = process.env;
 
           async function task() {
             const fileName = `simtree-hourly-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
-            // Solo tablas específicas para el hourly
             await execAsync(`pg_dump "${DATABASE_URL}" --no-owner --no-acl -t wallets -t wallet_transactions -t purchased_esims | gzip -9 > ${filePath}`);
-            
             const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
             const drive = google.drive({ version: 'v3', auth });
-            
             await drive.files.create({ requestBody: { name: fileName, parents: [GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
-            
             const list = await drive.files.list({ q: `'${GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed=false`, orderBy: 'createdTime asc', supportsAllDrives: true, includeItemsFromAllDrives: true });
             const files = list.data.files || [];
             if (files.length > 48) {
@@ -55,7 +57,6 @@ jobs:
             }
             if (existsSync(filePath)) unlinkSync(filePath);
           }
-
           async function run() {
             let attempt = 1;
             while (attempt <= 3) {
