@@ -1,4 +1,4 @@
-name: DB Backup - Monthly
+name: DB Backup - Monthly (FINAL FIX)
 on:
   schedule:
     - cron: '0 8 1 * *'
@@ -10,6 +10,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install PostgreSQL 17 client
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -17,8 +18,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
-      - name: Install dependencies
+
+      # Instalar dependencias de Node.js
+      - name: Install Node.js dependencies
         run: npm install --no-save googleapis
+
       - name: Run Monthly FULL Backup
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -28,20 +32,71 @@ jobs:
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
           import { exec } from 'child_process';
-          import { createReadStream, unlinkSync } from 'fs';
+          import { createReadStream, unlinkSync, statSync } from 'fs';
           import { promisify } from 'util';
           const execAsync = promisify(exec);
+
           async function run() {
-            const fileName = `simtree-monthly-FULL-${new Date().toISOString().split('T')[0]}.sql.gz`;
+            const timestamp = new Date().toISOString().split('T')[0];
+            const fileName = `simtree-monthly-FULL-${timestamp}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
+
             try {
-              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --verbose | gzip -9 > ${filePath}`);
-              const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
+              console.log('🔄 Starting monthly full backup...');
+              
+              const dumpCommand = `pg_dump "${process.env.DATABASE_URL}" \
+                --format=plain \
+                --schema=public \
+                --no-owner \
+                --no-acl \
+                --no-privileges \
+                --blobs \
+                --encoding=UTF8 \
+                --verbose \
+                --lock-wait-timeout=30000 \
+                2>&1`;
+              
+              console.log('Executing pg_dump...');
+              await execAsync(`${dumpCommand} | gzip -9 > ${filePath}`);
+
+              const stats = statSync(filePath);
+              const sizeKB = (stats.size / 1024).toFixed(2);
+              console.log(`📦 Monthly backup size: ${sizeKB} KB`);
+
+              if (stats.size < 500000) {
+                console.error('⚠️ CRITICAL: Monthly backup is too small!');
+                throw new Error(`Backup validation failed: ${sizeKB} KB`);
+              }
+
+              console.log('☁️ Uploading to Google Drive (Monthly folder)...');
+              const auth = new google.auth.GoogleAuth({
+                credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+                scopes: ['https://www.googleapis.com/auth/drive']
+              });
+              
               const drive = google.drive({ version: 'v3', auth });
-              await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
+              
+              await drive.files.create({
+                requestBody: {
+                  name: fileName,
+                  parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+                  description: `Monthly full backup - ${timestamp}`
+                },
+                media: {
+                  mimeType: 'application/gzip',
+                  body: createReadStream(filePath)
+                },
+                supportsAllDrives: true
+              });
+
+              console.log(`✅ Monthly backup completed: ${sizeKB} KB`);
               unlinkSync(filePath);
-            } catch (error) { console.error(error); process.exit(1); }
+            } catch (error) {
+              console.error('❌ Monthly backup failed:', error.message);
+              process.exit(1);
+            }
           }
+
           run();
           EOF
           node backup.mjs
