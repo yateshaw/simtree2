@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: '0 8 1 * *'
   workflow_dispatch:
+
 jobs:
   backup:
     runs-on: ubuntu-24.04
@@ -33,11 +34,13 @@ jobs:
           async function run() {
             const fileName = `simtree-monthly-FULL-${new Date().toISOString().split('T')[0]}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
-            await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl | gzip -9 > ${filePath}`);
-            const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
-            const drive = google.drive({ version: 'v3', auth });
-            await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
-            unlinkSync(filePath);
+            try {
+              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --verbose | gzip -9 > ${filePath}`);
+              const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), scopes: ['https://www.googleapis.com/auth/drive'] });
+              const drive = google.drive({ version: 'v3', auth });
+              await drive.files.create({ requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, supportsAllDrives: true });
+              unlinkSync(filePath);
+            } catch (error) { console.error(error); process.exit(1); }
           }
           run();
           EOF
