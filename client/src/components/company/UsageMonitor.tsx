@@ -28,6 +28,7 @@ interface EmployeeUsageData {
     activationDate: string | null;
     expiryDate: string | null;
     lastUpdated: string | null;
+    planValidity: number | null;
   }>;
   totalDataLimit: number;
   totalDataUsed: number;
@@ -229,25 +230,6 @@ export default function UsageMonitor() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`text-lg font-semibold ${getUsageColor(employee.totalUsagePercentage)}`}>
-                      {employee.totalUsagePercentage}%
-                    </div>
-                    <p className="text-xs text-gray-600">
-                      {formatDataSize(employee.totalDataUsed.toFixed(2))} / {formatDataSize(employee.totalDataLimit.toFixed(2))}
-                    </p>
-                  </div>
-                </div>
-                
-                <Progress 
-                  value={employee.totalUsagePercentage} 
-                  className="h-2 mb-3"
-                />
-                
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
-                    {employee.esims.length} plan{employee.esims.length !== 1 ? 's' : ''}
-                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -258,38 +240,67 @@ export default function UsageMonitor() {
                     {expandedEmployee === employee.employeeId ? 'Hide' : 'Show'} eSIMs
                   </Button>
                 </div>
-
-                {/* Expanded eSIM Details */}
-                {expandedEmployee === employee.employeeId && (
-                  <div className="mt-4 space-y-3 border-t pt-4">
-                    {employee.esims.map((esim) => (
-                      <div key={esim.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                
+                {/* Show individual plan details for each active eSIM */}
+                <div className="space-y-3">
+                  {employee.esims.map((esim) => (
+                    <div key={esim.id} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
                         <div>
                           <div className="font-medium text-sm">{esim.planName}</div>
-                          <div className="text-xs text-gray-600">
-                            {esim.orderId} • {esim.iccid.slice(-8)}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge 
-                              variant={esim.status === 'activated' ? 'default' : 'secondary'}
-                              className="text-xs"
-                            >
-                              {esim.status}
-                            </Badge>
-                            {esim.lastUpdated && (
-                              <span className="text-xs text-gray-500">
-                                Updated: {new Date(esim.lastUpdated).toLocaleDateString()}
-                              </span>
-                            )}
+                          <div className="text-xs text-gray-500">
+                            {formatDataSize(esim.dataLimit)} • {esim.planValidity ? `${esim.planValidity} days` : 'N/A'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`text-sm font-medium ${getUsageColor(esim.usagePercentage)}`}>
+                          <div className={`text-lg font-semibold ${getUsageColor(esim.usagePercentage)}`}>
                             {esim.usagePercentage}%
                           </div>
-                          <div className="text-xs text-gray-600">
+                          <p className="text-xs text-gray-600">
                             {formatDataSize(esim.dataUsed)} / {formatDataSize(esim.dataLimit)}
+                          </p>
+                        </div>
+                      </div>
+                      <Progress 
+                        value={esim.usagePercentage} 
+                        className="h-2"
+                      />
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge 
+                          variant={esim.status === 'activated' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {esim.status === 'activated' ? 'In Use' : esim.status === 'waiting_for_activation' ? 'Waiting' : esim.status}
+                        </Badge>
+                        {esim.lastUpdated && (
+                          <span className="text-xs text-gray-500">
+                            Updated: {new Date(esim.lastUpdated).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Expanded eSIM Details - show additional info like order ID */}
+                {expandedEmployee === employee.employeeId && (
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    <div className="text-xs text-gray-500 font-medium mb-2">Technical Details</div>
+                    {employee.esims.map((esim) => (
+                      <div key={`detail-${esim.id}`} className="flex items-center justify-between p-2 bg-gray-100 rounded text-xs">
+                        <div>
+                          <div className="font-medium">{esim.planName}</div>
+                          <div className="text-gray-600">
+                            Order: {esim.orderId} • ICCID: ...{esim.iccid.slice(-8)}
                           </div>
+                        </div>
+                        <div className="text-right text-gray-600">
+                          {esim.activationDate && (
+                            <div>Activated: {new Date(esim.activationDate).toLocaleDateString()}</div>
+                          )}
+                          {esim.expiryDate && (
+                            <div>Expires: {new Date(esim.expiryDate).toLocaleDateString()}</div>
+                          )}
                         </div>
                       </div>
                     ))}

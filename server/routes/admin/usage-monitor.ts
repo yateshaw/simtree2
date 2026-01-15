@@ -202,6 +202,7 @@ interface EmployeeUsageData {
     activationDate: string | null;
     expiryDate: string | null;
     lastUpdated: string | null;
+    planValidity: number | null;
   }>;
   totalDataLimit: number;
   totalDataUsed: number;
@@ -677,6 +678,7 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
         iccid: schema.purchasedEsims.iccid,
         planName: schema.esimPlans.name,
         planData: schema.esimPlans.data,
+        planValidity: schema.esimPlans.validity,
         dataUsed: schema.purchasedEsims.dataUsed,
         status: schema.purchasedEsims.status,
         purchaseDate: schema.purchasedEsims.purchaseDate,
@@ -769,6 +771,13 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
         }
       }
 
+      // Skip cancelled/refunded eSIMs entirely - they shouldn't appear in usage monitor
+      const isCancelled = isEsimCancelledOrRefunded(esim);
+      if (isCancelled) {
+        console.log(`[Usage Monitor] Skipping cancelled eSIM ${esim.orderId} (${esim.planName})`);
+        continue;
+      }
+
       // Only add to display if not a depleted plan that should be hidden
       if (!shouldHideDepleted) {
         // Add eSIM to employee
@@ -785,17 +794,16 @@ router.get("/company-usage/:companyId", requireAuth, async (req, res) => {
           activationDate: esim.activationDate?.toISOString() || null,
           expiryDate: esim.expiryDate?.toISOString() || null,
           lastUpdated,
+          planValidity: esim.planValidity || null,
         });
 
-        // Update employee totals only for non-hidden plans
+        // Update employee totals only for non-hidden and non-cancelled plans
         employee.totalDataLimit += dataLimit;
         employee.totalDataUsed += dataUsed;
         
-        // Count active and expired eSIMs using comprehensive detection
+        // Count active and waiting eSIMs
         if (isEsimActive(esim)) {
           employee.activeEsimsCount++;
-        } else if (esim.status === 'expired' || esim.status === 'cancelled' || isEsimCancelledOrRefunded(esim)) {
-          employee.expiredEsimsCount++;
         }
       }
     }
