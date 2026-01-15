@@ -41,9 +41,10 @@ jobs:
             const filePath = `/tmp/${fileName}`;
             
             try {
-              // Cambiamos a formato custom (-Fc) que es más robusto para Neon/Postgres 17
-              console.log("Iniciando volcado de datos...");
-              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --format=p --no-owner --no-acl --inserts | gzip -9 > ${filePath}`);
+              // Usamos --blobs y quitamos verbose para maximizar estabilidad
+              // Este comando DEBE extraer los datos de public.esim_plans y demás
+              console.log("Iniciando volcado completo de la base de datos...");
+              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --blobs | gzip -9 > ${filePath}`);
               
               const auth = new google.auth.GoogleAuth({ 
                 credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), 
@@ -52,27 +53,20 @@ jobs:
               
               const drive = google.drive({ version: 'v3', auth });
               
-              console.log(`Subiendo archivo a Drive: ${fileName}`);
-              const res = await drive.files.create({ 
-                requestBody: { 
-                  name: fileName, 
-                  parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] 
-                }, 
-                media: { 
-                  mimeType: 'application/gzip', 
-                  body: createReadStream(filePath) 
-                }, 
+              console.log(`Subiendo archivo a Drive...`);
+              await drive.files.create({ 
+                requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, 
+                media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, 
                 supportsAllDrives: true 
               });
               
-              console.log("Backup completado exitosamente.");
+              console.log("¡Backup completado con éxito!");
               unlinkSync(filePath);
             } catch (error) {
-              console.error("ERROR CRÍTICO:", error.message);
+              console.error("ERROR EN BACKUP:", error.message);
               process.exit(1);
             }
           }
-
           run();
           EOF
           node backup.mjs
