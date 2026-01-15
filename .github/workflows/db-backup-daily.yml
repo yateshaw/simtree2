@@ -41,8 +41,9 @@ jobs:
             const filePath = `/tmp/${fileName}`;
             
             try {
-              // Forzamos el volcado completo de datos y esquemas
-              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --verbose | gzip -9 > ${filePath}`);
+              // Cambiamos a formato custom (-Fc) que es más robusto para Neon/Postgres 17
+              console.log("Iniciando volcado de datos...");
+              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --format=p --no-owner --no-acl --inserts | gzip -9 > ${filePath}`);
               
               const auth = new google.auth.GoogleAuth({ 
                 credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), 
@@ -51,8 +52,8 @@ jobs:
               
               const drive = google.drive({ version: 'v3', auth });
               
-              console.log(`Subiendo archivo: ${fileName}`);
-              await drive.files.create({ 
+              console.log(`Subiendo archivo a Drive: ${fileName}`);
+              const res = await drive.files.create({ 
                 requestBody: { 
                   name: fileName, 
                   parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] 
@@ -64,10 +65,10 @@ jobs:
                 supportsAllDrives: true 
               });
               
-              console.log("Subida completada con éxito.");
+              console.log("Backup completado exitosamente.");
               unlinkSync(filePath);
             } catch (error) {
-              console.error("Error durante el backup:", error);
+              console.error("ERROR CRÍTICO:", error.message);
               process.exit(1);
             }
           }
