@@ -1,4 +1,4 @@
-name: DB Backup - Daily
+name: DB Backup - Daily (FINAL FIX)
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -19,9 +19,6 @@ jobs:
           sudo apt-get install -y postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
-        run: npm install --no-save googleapis
-
       - name: Run Daily FULL Backup
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -31,42 +28,113 @@ jobs:
           cat > backup.mjs << 'EOF'
           import { google } from 'googleapis';
           import { exec } from 'child_process';
-          import { createReadStream, unlinkSync } from 'fs';
+          import { createReadStream, unlinkSync, statSync } from 'fs';
           import { promisify } from 'util';
-
           const execAsync = promisify(exec);
 
           async function run() {
-            const fileName = `simtree-daily-FULL-${new Date().toISOString().split('T')[0]}.sql.gz`;
+            const timestamp = new Date().toISOString().split('T')[0];
+            const fileName = `simtree-daily-FULL-${timestamp}.sql.gz`;
             const filePath = `/tmp/${fileName}`;
-            
+
             try {
-              // Usamos --blobs y quitamos verbose para maximizar estabilidad
-              // Este comando DEBE extraer los datos de public.esim_plans y demás
-              console.log("Iniciando volcado completo de la base de datos...");
-              await execAsync(`pg_dump "${process.env.DATABASE_URL}" --no-owner --no-acl --blobs | gzip -9 > ${filePath}`);
+              console.log('🔄 Starting full database backup...');
               
-              const auth = new google.auth.GoogleAuth({ 
-                credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON), 
-                scopes: ['https://www.googleapis.com/auth/drive'] 
+              // CORRECCIÓN CRÍTICA: Agregar --format=plain y especificar explícitamente que queremos datos
+              const dumpCommand = `pg_dump "${process.env.DATABASE_URL}" \
+                --format=plain \
+                --schema=public \
+                --no-owner \
+                --no-acl \
+                --no-privileges \
+                --blobs \
+                --encoding=UTF8 \
+                --verbose \
+                --lock-wait-timeout=30000 \
+                2>&1`;
+              
+              console.log('Executing pg_dump...');
+              const { stdout, stderr } = await execAsync(`${dumpCommand} | gzip -9 > ${filePath}`);
+              
+              if (stderr && !stderr.includes('NOTICE')) {
+                console.log('pg_dump output:', stderr);
+              }
+
+              // Verificar tamaño del archivo
+              const stats = statSync(filePath);
+              const sizeKB = (stats.size / 1024).toFixed(2);
+              console.log(`📦 Backup file size: ${sizeKB} KB`);
+
+              // VALIDACIÓN CRÍTICA: El backup debe ser >500 KB para ser válido
+              if (stats.size < 500000) {
+                console.error('⚠️ CRITICAL: Backup file is too small!');
+                console.error(`Expected: >500 KB, Got: ${sizeKB} KB`);
+                
+                // Intentar obtener más información
+                console.error('Decompressing to check contents...');
+                await execAsync(`gunzip -c ${filePath} | head -100`).then(
+                  ({ stdout }) => console.error('First 100 lines:', stdout)
+                ).catch(e => console.error('Could not decompress:', e.message));
+                
+                throw new Error(`Backup validation failed: file too small (${sizeKB} KB)`);
+              }
+
+              console.log('☁️ Uploading to Google Drive...');
+              const auth = new google.auth.GoogleAuth({
+                credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+                scopes: ['https://www.googleapis.com/auth/drive']
               });
               
               const drive = google.drive({ version: 'v3', auth });
               
-              console.log(`Subiendo archivo a Drive...`);
-              await drive.files.create({ 
-                requestBody: { name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] }, 
-                media: { mimeType: 'application/gzip', body: createReadStream(filePath) }, 
-                supportsAllDrives: true 
+              const response = await drive.files.create({
+                requestBody: {
+                  name: fileName,
+                  parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+                  description: `Daily full backup - ${timestamp}`
+                },
+                media: {
+                  mimeType: 'application/gzip',
+                  body: createReadStream(filePath)
+                },
+                supportsAllDrives: true
               });
+
+              console.log(`✅ Backup uploaded successfully!`);
+              console.log(`📊 File: ${fileName}`);
+              console.log(`📏 Size: ${sizeKB} KB`);
+              console.log(`🆔 Drive ID: ${response.data.id}`);
               
-              console.log("¡Backup completado con éxito!");
               unlinkSync(filePath);
             } catch (error) {
-              console.error("ERROR EN BACKUP:", error.message);
+              console.error('❌ Backup failed:', error.message);
+              if (error.stdout) console.error('STDOUT:', error.stdout);
+              if (error.stderr) console.error('STDERR:', error.stderr);
               process.exit(1);
             }
           }
+
           run();
           EOF
           node backup.mjs
+
+      - name: Notify on Failure
+        if: failure()
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          NOTIFICATION_EMAIL: ${{ secrets.BACKUP_NOTIFICATION_EMAIL }}
+        run: |
+          npm install --no-save @sendgrid/mail
+          cat > notify.mjs << 'EOF'
+          import sgMail from '@sendgrid/mail';
+          sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+          await sgMail.send({
+            to: process.env.NOTIFICATION_EMAIL,
+            from: process.env.FROM_EMAIL,
+            subject: '🚨 Daily Backup Failed - SimTree',
+            text: 'El backup diario falló. Revisa GitHub Actions inmediatamente.',
+            html: '<h2>⚠️ Backup Failure Alert</h2><p>El backup diario de SimTree falló.</p><p><strong>Acción requerida: Revisar logs en GitHub Actions</strong></p>'
+          });
+          EOF
+          node notify.mjs
