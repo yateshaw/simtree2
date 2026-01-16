@@ -1,0 +1,44 @@
+name: Check Database Connections
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Check PROD Database
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          echo "================================"
+          echo "CHECKING PROD_DATABASE_URL"
+          echo "================================"
+          psql "$DATABASE_URL" -c "SELECT current_database(), pg_size_pretty(pg_database_size(current_database())), (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count;"
+          echo ""
+
+      - name: Check DEV Database
+        env:
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: |
+          echo "================================"
+          echo "CHECKING DEV_DATABASE_URL"
+          echo "================================"
+          psql "$DATABASE_URL" -c "SELECT current_database(), pg_size_pretty(pg_database_size(current_database())), (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count;" || echo "Failed or doesn't exist"
+          echo ""
+
+      - name: Check OLD Database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "================================"
+          echo "CHECKING DATABASE_URL (old)"
+          echo "================================"
+          psql "$DATABASE_URL" -c "SELECT current_database(), pg_size_pretty(pg_database_size(current_database())), (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count;" || echo "Failed or doesn't exist"
+          echo ""
