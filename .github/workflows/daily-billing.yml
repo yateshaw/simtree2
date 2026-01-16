@@ -1,0 +1,34 @@
+name: Daily Billing & Credit Notes
+
+on:
+  schedule:
+    - cron: '59 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-billing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Daily Billing
+        run: |
+          echo "Starting daily billing at $(date -u)"
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.REPLIT_APP_URL }}/api/scheduled/run-daily-billing" \
+            -H "Content-Type: application/json" \
+            -H "x-billing-api-key: ${{ secrets.BILLING_API_KEY }}" \
+            --max-time 120)
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response code: $http_code"
+          echo "Response body: $body"
+          
+          if [ "$http_code" != "200" ]; then
+            echo "Billing failed with status $http_code"
+            exit 1
+          fi
+          
+          echo "Billing completed successfully"
+          echo "$body" | jq .
