@@ -1,0 +1,80 @@
+name: DEBUG - Which Database Am I Using
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Check ALL Database Connections
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "=================================================="
+          echo "🔍 CHECKING ALL DATABASE CONNECTIONS"
+          echo "=================================================="
+          echo ""
+          
+          echo "1️⃣ PROD_DATABASE_URL:"
+          if [ -n "$PROD_DATABASE_URL" ]; then
+            echo "  ✅ Secret exists"
+            echo "  Host: $(echo "$PROD_DATABASE_URL" | sed -E 's/.*@([^\/]+).*/\1/')"
+            psql "$PROD_DATABASE_URL" -c "
+              SELECT 
+                current_database() AS database,
+                pg_size_pretty(pg_database_size(current_database())) AS size,
+                (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count
+            " 2>&1 || echo "  ❌ Connection failed"
+          else
+            echo "  ❌ Secret NOT set"
+          fi
+          echo ""
+          
+          echo "2️⃣ DEV_DATABASE_URL:"
+          if [ -n "$DEV_DATABASE_URL" ]; then
+            echo "  ✅ Secret exists"
+            echo "  Host: $(echo "$DEV_DATABASE_URL" | sed -E 's/.*@([^\/]+).*/\1/')"
+            psql "$DEV_DATABASE_URL" -c "
+              SELECT 
+                current_database() AS database,
+                pg_size_pretty(pg_database_size(current_database())) AS size,
+                (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count
+            " 2>&1 || echo "  ❌ Connection failed or table doesn't exist"
+          else
+            echo "  ❌ Secret NOT set"
+          fi
+          echo ""
+          
+          echo "3️⃣ DATABASE_URL (la vieja?):"
+          if [ -n "$DATABASE_URL" ]; then
+            echo "  ✅ Secret exists"
+            echo "  Host: $(echo "$DATABASE_URL" | sed -E 's/.*@([^\/]+).*/\1/')"
+            psql "$DATABASE_URL" -c "
+              SELECT 
+                current_database() AS database,
+                pg_size_pretty(pg_database_size(current_database())) AS size,
+                (SELECT COUNT(*) FROM esim_plans) AS esim_plans_count
+            " 2>&1 || echo "  ❌ Connection failed or table doesn't exist"
+          else
+            echo "  ❌ Secret NOT set"
+          fi
+          echo ""
+          
+          echo "=================================================="
+          echo "📊 ANALYSIS"
+          echo "=================================================="
+          echo ""
+          echo "La base de datos que DEBERÍA usarse para backups es PROD_DATABASE_URL"
+          echo "Si PROD tiene 2000+ filas y los backups solo 130 KB, entonces:"
+          echo "  → Los workflows NO están usando PROD_DATABASE_URL correctamente"
+          echo ""
+          echo "Verifica cuál tiene tus datos reales (2000+ filas en esim_plans)"
