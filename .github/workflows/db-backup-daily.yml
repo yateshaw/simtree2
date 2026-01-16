@@ -1,0 +1,120 @@
+name: DB Backup - Daily
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> $GITHUB_PATH
+          
+      - name: Install Node dependencies
+        run: npm install --no-save googleapis
+        
+      - name: Run Daily Backup
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID_DAILY }}
+        run: |
+          cat > backup.mjs << 'EOF'
+          import { google } from 'googleapis';
+          import { exec } from 'child_process';
+          import { createReadStream, unlinkSync, statSync, existsSync } from 'fs';
+          import { promisify } from 'util';
+          const execAsync = promisify(exec);
+
+          async function run() {
+            const fileName = `simtree-daily-${new Date().toISOString().split('T')[0]}.sql.gz`;
+            const filePath = `/tmp/${fileName}`;
+
+            try {
+              console.log('🔄 Starting daily backup...');
+              
+              const cmd = `pg_dump "${process.env.DATABASE_URL}" \
+                --format=plain \
+                --schema=public \
+                --no-owner \
+                --no-acl \
+                --column-inserts \
+                --blobs \
+                --encoding=UTF8 \
+                --verbose \
+                --lock-wait-timeout=30000`;
+              
+              await execAsync(`${cmd} 2>&1 | gzip -9 > ${filePath}`);
+              
+              const stats = statSync(filePath);
+              const sizeKB = (stats.size / 1024).toFixed(2);
+              console.log(`📦 Backup size: ${sizeKB} KB`);
+              
+              if (stats.size < 500000) {
+                throw new Error(`Backup too small: ${sizeKB} KB`);
+              }
+              
+              console.log('☁️ Uploading to Google Drive...');
+              const auth = new google.auth.GoogleAuth({
+                credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+                scopes: ['https://www.googleapis.com/auth/drive']
+              });
+              
+              const drive = google.drive({ version: 'v3', auth });
+              
+              await drive.files.create({
+                requestBody: { 
+                  name: fileName, 
+                  parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] 
+                },
+                media: { 
+                  mimeType: 'application/gzip', 
+                  body: createReadStream(filePath) 
+                },
+                supportsAllDrives: true
+              });
+              
+              console.log(`✅ Daily backup completed: ${sizeKB} KB`);
+              
+              const res = await drive.files.list({
+                q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
+                fields: 'files(id, name, createdTime)',
+                orderBy: 'createdTime desc',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
+              });
+              
+              const files = res.data.files || [];
+              if (files.length > 30) {
+                const toDelete = files.slice(30);
+                console.log(`🗑️ Removing ${toDelete.length} old backups...`);
+                for (const file of toDelete) {
+                  await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
+                }
+              }
+              
+              if (existsSync(filePath)) unlinkSync(filePath);
+              
+            } catch (error) {
+              console.error('❌ Backup failed:', error.message);
+              process.exit(1);
+            }
+          }
+
+          run();
+          EOF
+          node backup.mjs
